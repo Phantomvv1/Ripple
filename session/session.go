@@ -6,6 +6,13 @@ import (
 	"net"
 )
 
+const (
+	StateInit = iota
+	StateHandshake
+	StateReady
+	StateClosed
+)
+
 type Router struct {
 	connection  *net.TCPConn
 	authEnabled bool
