@@ -49,8 +49,24 @@ func (m Message) String() string {
 	return fmt.Sprintf("Message v%d, flags: %s, type: %s\nlength: %d\npayload: %s", m.version, strconv.FormatInt(int64(m.flags), 2), msgType, m.length, string(m.payload))
 }
 
-func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
+func ValidMsgType(msgType byte) bool {
 	if msgType != RequestMsg && msgType != ResponseMsg && msgType != ControlMsg {
+		return false
+	}
+
+	return true
+}
+
+func ValidPayloadSize(length uint32) bool {
+	if length >= uint32(MaxPayloadSize) {
+		return false
+	}
+
+	return true
+}
+
+func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
+	if !ValidMsgType(msgType) {
 		return nil, errors.New("Error: unknown message type")
 	}
 
@@ -63,28 +79,31 @@ func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 	}, nil
 }
 
-func Encode(m *Message) ([]byte, error) {
-	if m.length >= uint32(MaxPayloadSize) {
-		return nil, errors.New("Error: the size of the payload is too big")
+func Encode(w io.Writer, m *Message) error {
+	if !ValidPayloadSize(m.length) {
+		return errors.New("Error: the size of the payload is too big")
 	}
 
 	buf := make([]byte, 0, m.length+9) // magics + version + flags + msgType + length
 
-	buf = append(buf, Magic1)
-	buf = append(buf, Magic2)
-
-	buf = append(buf, m.version)
-	buf = append(buf, m.flags)
-	buf = append(buf, m.msgType)
+	buf = append(buf, Magic1, Magic2, m.version, m.flags, m.msgType)
 
 	lenBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(lenBuf, m.length)
-
 	buf = append(buf, lenBuf...)
 
 	buf = append(buf, m.payload...)
 
-	return buf, nil
+	n, err := w.Write(buf)
+	if err != nil {
+		return err
+	}
+
+	if n != len(buf) {
+		return errors.New("Error: the number of bytes written is smaller than the intended")
+	}
+
+	return nil
 }
 
 func Decode(r io.Reader) (*Message, error) {
@@ -108,10 +127,18 @@ func Decode(r io.Reader) (*Message, error) {
 		return nil, errors.New("Error: unsupported version of the protocol")
 	}
 
+	if !ValidMsgType(header[4]) {
+		return nil, errors.New("Error: unknown message type")
+	}
+
 	msg.version = Version
 	msg.flags = header[3]
 	msg.msgType = header[4]
-	msg.length = binary.BigEndian.Uint32(header[5:8])
+	msg.length = binary.BigEndian.Uint32(header[5:9])
+
+	if !ValidPayloadSize(msg.length) {
+		return nil, errors.New("Error: the size of the payload is too big")
+	}
 
 	payload := make([]byte, msg.length)
 	_, err = io.ReadFull(r, payload)

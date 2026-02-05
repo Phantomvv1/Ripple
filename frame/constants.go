@@ -15,4 +15,6 @@ const (
 
 var MaxPayloadSize = 1 << 21
 
-var ResponseMsgOK, _ = NewMessage(nil, ResponseMsg, 0)
+var (
+	ResponseMsgOK, _ = NewMessage(nil, ResponseMsg, 0)
+)

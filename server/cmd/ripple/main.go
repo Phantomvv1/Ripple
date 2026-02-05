@@ -20,9 +20,7 @@ func handleConn(conn net.Conn) {
 
 		log.Println(msg)
 
-		resp, _ := frame.Encode(frame.ResponseMsgOK)
-
-		_, err = conn.Write(resp)
+		err = frame.Encode(conn, frame.ResponseMsgOK)
 		if err != nil {
 			log.Println(err)
 			return
