@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -34,6 +35,30 @@ func (m Message) Length() uint32 {
 
 func (m Message) Payload() []byte {
 	return m.payload
+}
+
+func (m Message) Equals(msg Message) bool {
+	if m.version != msg.version {
+		return false
+	}
+
+	if m.flags != msg.flags {
+		return false
+	}
+
+	if m.msgType != msg.msgType {
+		return false
+	}
+
+	if m.length != msg.length {
+		return false
+	}
+
+	if !bytes.Equal(m.payload, msg.payload) {
+		return false
+	}
+
+	return true
 }
 
 func (m Message) String() string {

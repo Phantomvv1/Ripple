@@ -2,8 +2,10 @@ package session
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"net"
+
+	"github.com/Phantomvv1/Ripple/frame"
 )
 
 const (
@@ -13,41 +15,79 @@ const (
 	StateClosed
 )
 
-type Router struct {
-	connection  *net.TCPConn
+type Conn struct {
+	conn        net.Conn
+	state       int
 	authEnabled bool
 }
 
-func NewRouter() *Router {
-	return &Router{
-		connection:  nil,
+func NewConn(addr string) (*Conn, error) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Conn{
+		conn:        conn,
+		state:       StateInit,
 		authEnabled: true,
-	}
+	}, nil
 }
 
-func NewRouterWithoutAuth() *Router {
-	return &Router{
-		connection:  nil,
+func NewConnWithoutAuth(addr string) (*Conn, error) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Conn{
+		conn:        conn,
+		state:       StateInit,
 		authEnabled: false,
+	}, nil
+}
+
+func (c *Conn) Run() error {
+	c.handshake()
+	for {
+		msg, err := frame.Decode(c.conn)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(msg)
+
+		err = frame.Encode(c.conn, frame.MessageOK)
+		if err != nil {
+			return err
+		}
 	}
 }
 
-func (r *Router) Run(addr *net.TCPAddr) error {
-	listener, err := net.ListenTCP("tcp", addr)
+func (c *Conn) handshake() error {
+	msg, err := frame.Decode(c.conn)
 	if err != nil {
 		return err
 	}
 
-	for {
-		conn, err := listener.AcceptTCP()
-		if err != nil {
-			log.Println("Error: failed to establish connection")
-			innerErr := conn.Close()
-			if !errors.Is(innerErr, net.ErrClosed) {
-				return innerErr
-			}
-		}
-
-		r.connection = conn
+	if !msg.Equals(*frame.MessageHello) {
+		return errors.New("Error: failed handshake - no hello message")
 	}
+
+	err = frame.Encode(c.conn, frame.MessageWelcome)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
