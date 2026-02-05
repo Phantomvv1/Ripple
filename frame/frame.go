@@ -46,6 +46,7 @@ func (m Message) String() string {
 	case ControlMsg:
 		msgType = "control message"
 	}
+
 	return fmt.Sprintf("Message v%d, flags: %s, type: %s\nlength: %d\npayload: %s", m.version, strconv.FormatInt(int64(m.flags), 2), msgType, m.length, string(m.payload))
 }
 

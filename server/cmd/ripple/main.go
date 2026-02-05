@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/netip"
@@ -18,7 +19,7 @@ func handleConn(conn net.Conn) {
 			return
 		}
 
-		log.Println(msg)
+		fmt.Println(msg)
 
 		err = frame.Encode(conn, frame.ResponseMsgOK)
 		if err != nil {
