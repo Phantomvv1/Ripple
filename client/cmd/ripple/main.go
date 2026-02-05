@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 
@@ -15,6 +16,12 @@ func main() {
 	}
 	defer conn.Close()
 
+	err = frame.Encode(conn, frame.MessageHello)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	m, err := frame.NewMessage([]byte("Test"), frame.RequestMsg, 0)
 	if err != nil {
 		log.Println(err)
@@ -26,4 +33,12 @@ func main() {
 		log.Println(err)
 		return
 	}
+
+	msg, err := frame.Decode(conn)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	fmt.Println(msg)
 }

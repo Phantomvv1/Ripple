@@ -16,66 +16,63 @@ const (
 )
 
 type Conn struct {
-	conn        net.Conn
+	listener    net.Listener
 	state       int
 	authEnabled bool
 }
 
-func NewConn(addr string) (*Conn, error) {
+func NewSession(addr string) (*Conn, error) {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-
 	return &Conn{
-		conn:        conn,
+		listener:    listener,
 		state:       StateInit,
 		authEnabled: true,
 	}, nil
 }
 
-func NewConnWithoutAuth(addr string) (*Conn, error) {
+func NewSessionWithoutAuth(addr string) (*Conn, error) {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-
 	return &Conn{
-		conn:        conn,
+		listener:    listener,
 		state:       StateInit,
 		authEnabled: false,
 	}, nil
 }
 
 func (c *Conn) Run() error {
-	c.handshake()
 	for {
-		msg, err := frame.Decode(c.conn)
+		conn, err := c.listener.Accept()
+		err = c.handshake(conn)
+		if err != nil {
+			return err
+		}
+
+		msg, err := frame.Decode(conn)
 		if err != nil {
 			return err
 		}
 
 		fmt.Println(msg)
 
-		err = frame.Encode(c.conn, frame.MessageOK)
+		err = frame.Encode(conn, frame.MessageOK)
 		if err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Conn) handshake() error {
-	msg, err := frame.Decode(c.conn)
+func (c *Conn) handshake(conn net.Conn) error {
+	c.state = StateHandshake
+
+	msg, err := frame.Decode(conn)
 	if err != nil {
 		return err
 	}
@@ -84,10 +81,12 @@ func (c *Conn) handshake() error {
 		return errors.New("Error: failed handshake - no hello message")
 	}
 
-	err = frame.Encode(c.conn, frame.MessageWelcome)
+	err = frame.Encode(conn, frame.MessageWelcome)
 	if err != nil {
 		return err
 	}
+
+	c.state = StateReady
 
 	return nil
 }
