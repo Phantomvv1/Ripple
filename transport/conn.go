@@ -21,6 +21,7 @@ type Conn struct {
 }
 
 func (c *Conn) handleConnection(l *Listener, sessionId string) {
+	defer c.cleanUp(l, sessionId)
 	now := time.Now()
 
 	c.SetDeadline(time.Now().Add(time.Second))
@@ -47,7 +48,6 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 		msg, err := frame.Decode(c)
 		if err != nil {
 			log.Println(err)
-			c.cleanUp(l, sessionId)
 			return
 		}
 
@@ -70,7 +70,6 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 			}
 
 			c.Close()
-			c.cleanUp(l, sessionId)
 
 			break
 		}
