@@ -1,9 +1,10 @@
 package session
 
 import (
-	"errors"
 	"fmt"
+	"log"
 	"net"
+	"time"
 
 	"github.com/Phantomvv1/Ripple/frame"
 )
@@ -50,10 +51,13 @@ func NewSessionWithoutAuth(addr string) (*Conn, error) {
 func (c *Conn) Run() error {
 	for {
 		conn, err := c.listener.Accept()
+
+		now := time.Now()
 		err = c.handshake(conn)
 		if err != nil {
 			return err
 		}
+		log.Println(time.Since(now))
 
 		msg, err := frame.Decode(conn)
 		if err != nil {
@@ -61,6 +65,15 @@ func (c *Conn) Run() error {
 		}
 
 		fmt.Println(msg)
+
+		if msg.Equals(*frame.MessagePing) {
+			err = frame.Encode(conn, frame.MessagePong)
+			if err != nil {
+				return err
+			}
+
+			continue
+		}
 
 		err = frame.Encode(conn, frame.MessageOK)
 		if err != nil {
@@ -72,16 +85,7 @@ func (c *Conn) Run() error {
 func (c *Conn) handshake(conn net.Conn) error {
 	c.state = StateHandshake
 
-	msg, err := frame.Decode(conn)
-	if err != nil {
-		return err
-	}
-
-	if !msg.Equals(*frame.MessageHello) {
-		return errors.New("Error: failed handshake - no hello message")
-	}
-
-	err = frame.Encode(conn, frame.MessageWelcome)
+	err := frame.Encode(conn, frame.MessageWelcome)
 	if err != nil {
 		return err
 	}
