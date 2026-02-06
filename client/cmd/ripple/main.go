@@ -16,7 +16,15 @@ func main() {
 		return
 	}
 	defer conn.Close()
+
 	now := time.Now()
+	msg, err := frame.Decode(conn)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	fmt.Println(time.Since(now))
+	fmt.Println(msg)
 
 	err = frame.Encode(conn, frame.MessageHello)
 	if err != nil {
@@ -24,12 +32,13 @@ func main() {
 		return
 	}
 
-	msg, err := frame.Decode(conn)
+	msg, err = frame.Decode(conn)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
+	fmt.Println(time.Since(now))
 	fmt.Println(msg)
 
 	m, err := frame.NewMessage([]byte("Test"), frame.RequestMsg, 0)
@@ -64,6 +73,23 @@ func main() {
 		return
 	}
 
+	err = frame.Encode(conn, frame.MessageClose)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	msg, err = frame.Decode(conn)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	if !msg.Equals(*frame.MessageClose) {
+		log.Println("Error: connection wasn't propperly closed")
+	}
+
 	fmt.Println(msg)
 	fmt.Println(time.Since(now))
+
 }

@@ -51,6 +51,9 @@ func NewSessionWithoutAuth(addr string) (*Conn, error) {
 func (c *Conn) Run() error {
 	for {
 		conn, err := c.listener.Accept()
+		if err != nil {
+			return err
+		}
 
 		now := time.Now()
 		err = c.handshake(conn)
@@ -59,25 +62,8 @@ func (c *Conn) Run() error {
 		}
 		log.Println(time.Since(now))
 
-		msg, err := frame.Decode(conn)
-		if err != nil {
-			return err
-		}
-
-		fmt.Println(msg)
-
-		if msg.Equals(*frame.MessagePing) {
-			err = frame.Encode(conn, frame.MessagePong)
-			if err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		err = frame.Encode(conn, frame.MessageOK)
-		if err != nil {
-			return err
+		if c.state == StateReady {
+			go handleConnection(conn)
 		}
 	}
 }
@@ -93,4 +79,45 @@ func (c *Conn) handshake(conn net.Conn) error {
 	c.state = StateReady
 
 	return nil
+}
+
+func handleConnection(conn net.Conn) {
+	now := time.Now()
+	for {
+		msg, err := frame.Decode(conn)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		fmt.Println(msg)
+
+		if msg.Equals(*frame.MessagePing) {
+			err = frame.Encode(conn, frame.MessagePong)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			continue
+		} else if msg.Equals(*frame.MessageClose) {
+			err = frame.Encode(conn, frame.MessageClose)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			conn.Close()
+
+			break
+		}
+
+		err = frame.Encode(conn, frame.MessageOK)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		fmt.Println(time.Since(now))
+	}
 }

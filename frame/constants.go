@@ -19,13 +19,13 @@ var (
 	MessageOK, _ = NewMessage(nil, ResponseMsg, 0)
 
 	//This will be used for the handshake
-	MessageHello, _ = NewMessage([]byte{0}, ControlMsg, 0)
+	MessageHello, _ = NewMessage([]byte{'H'}, ControlMsg, 0)
 	//This will be used for the handshake
-	MessageWelcome, _ = NewMessage([]byte{1}, ControlMsg, 0)
+	MessageWelcome, _ = NewMessage([]byte{'W'}, ControlMsg, 0)
 	//This will be used for the handshake
-	MessageReject, _ = NewMessage([]byte{2}, ControlMsg, 0)
+	MessageReject, _ = NewMessage([]byte{'R'}, ControlMsg, 0)
 
-	MessageClose, _ = NewMessage([]byte{3}, ControlMsg, 0)
+	MessageClose, _ = NewMessage([]byte{'C'}, ControlMsg, 0)
 	MessagePing, _  = NewMessage([]byte("Ping"), ControlMsg, 0)
 	MessagePong, _  = NewMessage([]byte("Pong"), ControlMsg, 0)
 )
