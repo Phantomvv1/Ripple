@@ -70,8 +70,7 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 			}
 
 			c.Close()
-
-			break
+			return
 		}
 
 		err = frame.Encode(c, frame.MessageOK)
