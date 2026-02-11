@@ -52,7 +52,7 @@ func (l *Listener) Run() error {
 
 		sessionId := rand.Text()
 
-		upgradedConn := &Conn{Conn: conn, state: StateInit}
+		upgradedConn := newConn(conn)
 
 		l.mu.Lock()
 		l.connections[sessionId] = upgradedConn

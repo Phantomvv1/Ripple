@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -17,7 +19,28 @@ const (
 
 type Conn struct {
 	net.Conn
-	state int
+	state         int
+	responseCache map[string]*frame.Message
+}
+
+func newConn(conn net.Conn) *Conn {
+	return &Conn{
+		Conn:          conn,
+		state:         StateInit,
+		responseCache: make(map[string]*frame.Message),
+	}
+}
+
+func hashMessage(m *frame.Message) string {
+	algorithm := sha256.New()
+	lenght := make([]byte, 4)
+	binary.BigEndian.PutUint32(lenght, m.Length())
+	algorithm.Write([]byte{m.Version(), m.Flags(), m.MsgType()})
+	algorithm.Write(lenght)
+	algorithm.Write(m.Payload())
+
+	result := algorithm.Sum(nil)
+	return fmt.Sprintf("%x", result)
 }
 
 func (c *Conn) handleConnection(l *Listener, sessionId string) {
@@ -73,10 +96,24 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 			return
 		}
 
+		if msg.Cachable() {
+			if resp, ok := c.responseCache[hashMessage(msg)]; ok {
+				err = frame.Encode(c, resp)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+		}
+
 		err = frame.Encode(c, frame.MessageOK)
 		if err != nil {
 			log.Println(err)
 			return
+		}
+
+		if msg.Cachable() {
+			c.responseCache[hashMessage(msg)] = frame.MessageOK
 		}
 
 		fmt.Println(time.Since(now))

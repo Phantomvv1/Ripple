@@ -13,11 +13,11 @@ import (
 func main() {
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
-	go DialAndTest(wg)
-	go DialAndTest(wg)
-	go DialAndTest(wg)
+	// go DialAndTest(wg)
+	// go DialAndTest(wg)
+	DialAndTest(wg)
 
-	wg.Wait()
+	// wg.Wait()
 }
 
 func DialAndTest(wg *sync.WaitGroup) {
@@ -39,6 +39,7 @@ func DialAndTest(wg *sync.WaitGroup) {
 
 	fmt.Println(msg)
 
+	cacheCheck := time.Now()
 	err = frame.Encode(conn, frame.MessageHello)
 	if err != nil {
 		log.Println(err)
@@ -50,6 +51,20 @@ func DialAndTest(wg *sync.WaitGroup) {
 		log.Println(err)
 		return
 	}
+
+	err = frame.Encode(conn, frame.MessageHello)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	msg, err = frame.Decode(conn)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	fmt.Println("Cache time: ", time.Since(cacheCheck))
 
 	err = frame.Encode(conn, frame.MessageClose)
 	if err != nil {

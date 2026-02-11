@@ -19,7 +19,7 @@ var (
 	MessageOK, _ = NewMessage(nil, ResponseMsg, 0)
 
 	//This will be used for the handshake
-	MessageHello, _ = NewMessage([]byte{'H'}, controlMsg, 0)
+	MessageHello, _ = NewMessage([]byte{'H'}, controlMsg, CacheFlag)
 	//This will be used for the handshake
 	MessageWelcome, _ = NewMessage([]byte{'W'}, controlMsg, 0)
 	//This will be used for the handshake
@@ -28,4 +28,16 @@ var (
 	MessageClose, _ = NewMessage([]byte{'C'}, controlMsg, 0)
 	MessagePing, _  = NewMessage([]byte("Ping"), controlMsg, 0)
 	MessagePong, _  = NewMessage([]byte("Pong"), controlMsg, 0)
+)
+
+const (
+	OP_READ = iota
+	OP_WRITE
+	OP_UPDATE
+	OP_DELETE
+
+	CacheFlag             = 1 << 3
+	RequiresAuthFlag      = 1 << 4
+	CompressedPayloadFlag = 1 << 5
+	EncryptedPayloadFlag  = 1 << 6
 )

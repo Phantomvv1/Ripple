@@ -86,6 +86,11 @@ func (m *Message) DecodeJSONPayload(v any) error {
 	return nil
 }
 
+// Returns true if the message is cachable and false if it is not
+func (m Message) Cachable() bool {
+	return m.flags&CacheFlag != 0
+}
+
 func ValidMsgType(msgType byte) bool {
 	if msgType != RequestMsg && msgType != ResponseMsg && msgType != controlMsg {
 		return false
@@ -102,6 +107,9 @@ func ValidPayloadSize(length uint32) bool {
 	return true
 }
 
+// flags:
+// bytes 0 % 3 - Methods
+// byte 4: is request cachable; 0 - not, 1 - cache the request
 func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 	if !ValidMsgType(msgType) {
 		return nil, errors.New("Error: unknown message type")
