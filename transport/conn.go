@@ -103,6 +103,8 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 					log.Println(err)
 					return
 				}
+
+				continue
 			}
 		}
 
