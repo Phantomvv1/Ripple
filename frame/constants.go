@@ -1,7 +1,7 @@
 package frame
 
 const (
-	ControlMsg byte = iota
+	controlMsg byte = iota
 	RequestMsg
 	ResponseMsg
 )
@@ -19,13 +19,13 @@ var (
 	MessageOK, _ = NewMessage(nil, ResponseMsg, 0)
 
 	//This will be used for the handshake
-	MessageHello, _ = NewMessage([]byte{'H'}, ControlMsg, 0)
+	MessageHello, _ = NewMessage([]byte{'H'}, controlMsg, 0)
 	//This will be used for the handshake
-	MessageWelcome, _ = NewMessage([]byte{'W'}, ControlMsg, 0)
+	MessageWelcome, _ = NewMessage([]byte{'W'}, controlMsg, 0)
 	//This will be used for the handshake
-	MessageReject, _ = NewMessage([]byte{'R'}, ControlMsg, 0)
+	MessageReject, _ = NewMessage([]byte{'R'}, controlMsg, 0)
 
-	MessageClose, _ = NewMessage([]byte{'C'}, ControlMsg, 0)
-	MessagePing, _  = NewMessage([]byte("Ping"), ControlMsg, 0)
-	MessagePong, _  = NewMessage([]byte("Pong"), ControlMsg, 0)
+	MessageClose, _ = NewMessage([]byte{'C'}, controlMsg, 0)
+	MessagePing, _  = NewMessage([]byte("Ping"), controlMsg, 0)
+	MessagePong, _  = NewMessage([]byte("Pong"), controlMsg, 0)
 )

@@ -3,6 +3,7 @@ package frame
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -68,15 +69,25 @@ func (m Message) String() string {
 		msgType = "request message"
 	case ResponseMsg:
 		msgType = "response message"
-	case ControlMsg:
+	case controlMsg:
 		msgType = "control message"
 	}
 
 	return fmt.Sprintf("Message v%d, flags: %s, type: %s\nlength: %d\npayload: %s", m.version, strconv.FormatInt(int64(m.flags), 2), msgType, m.length, string(m.payload))
 }
 
+// This method is used to decode a json payload into the provided value. The value must be a pointer!
+func (m *Message) DecodeJSONPayload(v any) error {
+	err := json.Unmarshal(m.payload, v)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func ValidMsgType(msgType byte) bool {
-	if msgType != RequestMsg && msgType != ResponseMsg && msgType != ControlMsg {
+	if msgType != RequestMsg && msgType != ResponseMsg && msgType != controlMsg {
 		return false
 	}
 
@@ -103,6 +114,16 @@ func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 		length:  uint32(len(payload)),
 		payload: payload,
 	}, nil
+}
+
+// This function gets the payload, encodes it to json and returns a new message with the json encoded payload
+func NewJSONMessage[T any](payload T, msgType byte, flags byte) (*Message, error) {
+	msgPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewMessage(msgPayload, msgType, flags)
 }
 
 func Encode(w io.Writer, m *Message) error {
