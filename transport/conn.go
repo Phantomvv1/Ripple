@@ -35,7 +35,7 @@ func hashMessage(m *frame.Message) string {
 	algorithm := sha256.New()
 	lenght := make([]byte, 4)
 	binary.BigEndian.PutUint32(lenght, m.Length())
-	algorithm.Write([]byte{m.Version(), m.Flags(), m.MsgType()})
+	algorithm.Write([]byte{m.Version(), m.MsgType()})
 	algorithm.Write(lenght)
 	algorithm.Write(m.Payload())
 
