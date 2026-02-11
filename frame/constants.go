@@ -31,13 +31,7 @@ var (
 )
 
 const (
-	OP_READ = iota
-	OP_WRITE
-	OP_UPDATE
-	OP_DELETE
-
 	CacheFlag             = 1 << 3
-	RequiresAuthFlag      = 1 << 4
-	CompressedPayloadFlag = 1 << 5
-	EncryptedPayloadFlag  = 1 << 6
+	CompressedPayloadFlag = 1 << 4
+	EncryptedPayloadFlag  = 1 << 5
 )
