@@ -96,8 +96,10 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 			return
 		}
 
+		msgHash := hashMessage(msg)
+
 		if msg.Cachable() {
-			if resp, ok := c.responseCache[hashMessage(msg)]; ok {
+			if resp, ok := c.responseCache[msgHash]; ok {
 				err = frame.Encode(c, resp)
 				if err != nil {
 					log.Println(err)
@@ -115,7 +117,7 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 		}
 
 		if msg.Cachable() {
-			c.responseCache[hashMessage(msg)] = frame.MessageOK
+			c.responseCache[msgHash] = frame.MessageOK
 		}
 
 		fmt.Println(time.Since(now))
