@@ -91,6 +91,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 
 			c.token = *token
+		} else {
+			log.Println("Error: wrong token provided")
+			return
 		}
 
 		if msg.Equals(*frame.MessagePing) {
