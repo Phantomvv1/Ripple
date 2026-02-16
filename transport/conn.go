@@ -94,11 +94,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			err = frame.Encode(c, frame.MessageClose)
 			if err != nil {
 				log.Println(err)
-				c.Close()
 				return
 			}
 
-			c.Close()
 			return
 		}
 
@@ -148,4 +146,6 @@ func (c *Conn) cleanUp(connections map[string]*Conn, mu *sync.Mutex, sessionId s
 	mu.Lock()
 	delete(connections, sessionId)
 	mu.Unlock()
+
+	c.Close()
 }

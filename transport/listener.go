@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"net"
 	"sync"
+
+	"github.com/Phantomvv1/Ripple/frame"
 )
 
 type Listener struct {
@@ -20,9 +22,11 @@ func NewListener(addr string) (*Listener, error) {
 		return nil, err
 	}
 
+	frame.AuthEnabled = true
+
 	return &Listener{
 		listener:    listener,
-		authEnabled: true,
+		authEnabled: frame.AuthEnabled,
 		connections: make(map[string]*Conn),
 		mu:          sync.Mutex{},
 	}, nil
@@ -34,9 +38,11 @@ func NewListenerWithoutAuth(addr string) (*Listener, error) {
 		return nil, err
 	}
 
+	frame.AuthEnabled = false
+
 	return &Listener{
 		listener:    listener,
-		authEnabled: false,
+		authEnabled: frame.AuthEnabled,
 		connections: make(map[string]*Conn),
 		mu:          sync.Mutex{},
 	}, nil
