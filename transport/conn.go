@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -25,7 +26,7 @@ type Conn struct {
 	state         int
 	responseCache map[string]*frame.Message
 	authEnabled   bool
-	token         string
+	token         [16]byte
 }
 
 func newConn(conn net.Conn, authEnabled bool) *Conn {
@@ -82,6 +83,16 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 
 		fmt.Println(msg)
 
+		if frame.AuthEnabled && msg.AuthToken() == c.token {
+			token, err := makeAuthToken()
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			c.token = *token
+		}
+
 		if msg.Equals(*frame.MessagePing) {
 			err = frame.Encode(c, frame.MessagePong)
 			if err != nil {
@@ -115,6 +126,8 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 		}
 
+		frame.MessageOK.UpdateAuthToken(c.token)
+
 		err = frame.Encode(c, frame.MessageOK)
 		if err != nil {
 			log.Println(err)
@@ -132,7 +145,14 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 func (c *Conn) handshake() error {
 	c.state = StateHandshake
 
-	err := frame.Encode(c, frame.MessageWelcome)
+	token, err := makeAuthToken()
+	if err != nil {
+		return err
+	}
+
+	frame.MessageWelcome.UpdateAuthToken(*token)
+
+	err = frame.Encode(c, frame.MessageWelcome)
 	if err != nil {
 		return err
 	}
@@ -148,4 +168,15 @@ func (c *Conn) cleanUp(connections map[string]*Conn, mu *sync.Mutex, sessionId s
 	mu.Unlock()
 
 	c.Close()
+}
+
+func makeAuthToken() (*[16]byte, error) {
+	result := make([]byte, 16)
+	_, err := rand.Read(result)
+	if err != nil {
+		return nil, err
+	}
+
+	r := [16]byte(result)
+	return &r, nil
 }

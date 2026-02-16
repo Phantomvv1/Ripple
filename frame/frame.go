@@ -2,7 +2,6 @@ package frame
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -37,6 +36,14 @@ func (m Message) Length() uint32 {
 
 func (m Message) Payload() []byte {
 	return m.payload
+}
+
+func (m Message) AuthToken() [16]byte {
+	return m.authToken
+}
+
+func (m *Message) UpdateAuthToken(token [16]byte) {
+	m.authToken = token
 }
 
 func (m Message) Equals(msg Message) bool {
@@ -74,7 +81,11 @@ func (m Message) String() string {
 		msgType = "control message"
 	}
 
-	return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.authToken, m.length, string(m.payload))
+	if m.IsFlagSet(AuthEnabledFlag) {
+		return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.authToken, m.length, string(m.payload))
+	} else {
+		return fmt.Sprintf("Message v%d, flags: %b, type: %s\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.length, string(m.payload))
+	}
 }
 
 // This method is used to decode a json payload into the provided value. The value must be a pointer!
@@ -131,22 +142,16 @@ func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 		return nil, errors.New("Error: unknown message type")
 	}
 
-	if AuthEnabled {
+	if AuthEnabled && msgType != controlMsg {
 		flags |= AuthEnabledFlag
 	}
 
-	token, err := makeAuthToken()
-	if err != nil {
-		return nil, err
-	}
-
 	msg := &Message{
-		version:   Version,
-		flags:     flags,
-		msgType:   msgType,
-		authToken: *token,
-		length:    uint32(len(payload)),
-		payload:   payload,
+		version: Version,
+		flags:   flags,
+		msgType: msgType,
+		length:  uint32(len(payload)),
+		payload: payload,
 	}
 
 	if msg.IsFlagSet(EncryptedPayloadFlag) {
@@ -268,15 +273,4 @@ func Decode(r io.Reader) (*Message, error) {
 	msg.payload = payload
 
 	return msg, nil
-}
-
-func makeAuthToken() (*[16]byte, error) {
-	result := make([]byte, 16)
-	_, err := rand.Read(result)
-	if err != nil {
-		return nil, err
-	}
-
-	r := [16]byte(result)
-	return &r, nil
 }

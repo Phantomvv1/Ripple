@@ -47,11 +47,6 @@ const (
 func init() {
 	if AuthEnabled {
 		MessageOK.flags |= AuthEnabledFlag
-		MessageHello.flags |= AuthEnabledFlag
 		MessageWelcome.flags |= AuthEnabledFlag
-		MessageReject.flags |= AuthEnabledFlag
-		MessageClose.flags |= AuthEnabledFlag
-		MessagePing.flags |= AuthEnabledFlag
-		MessagePong.flags |= AuthEnabledFlag
 	}
 }
