@@ -176,9 +176,15 @@ func Encode(w io.Writer, m *Message) error {
 
 	buf = append(buf, Magic1, Magic2, m.version, m.flags, m.msgType)
 
+	buf = append(buf, m.authToken[:]...)
+
 	lenBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(lenBuf, m.length)
 	buf = append(buf, lenBuf...)
+
+	if m.IsFlagSet(AuthEnabledFlag) {
+		buf = append(buf, m.authToken[:]...)
+	}
 
 	buf = append(buf, m.payload...)
 
@@ -196,7 +202,7 @@ func Encode(w io.Writer, m *Message) error {
 
 func Decode(r io.Reader) (*Message, error) {
 	msg := &Message{}
-	header := make([]byte, 9)
+	header := make([]byte, 5)
 
 	_, err := io.ReadFull(r, header)
 	if err != nil {
@@ -222,7 +228,24 @@ func Decode(r io.Reader) (*Message, error) {
 	msg.version = Version
 	msg.flags = header[3]
 	msg.msgType = header[4]
-	msg.length = binary.BigEndian.Uint32(header[5:9])
+
+	if msg.IsFlagSet(AuthEnabledFlag) {
+		token := make([]byte, 16)
+		_, err = io.ReadFull(r, token)
+		if err != nil {
+			return nil, err
+		}
+
+		msg.authToken = [16]byte(token)
+	}
+
+	length := make([]byte, 4)
+	_, err = io.ReadFull(r, length)
+	if err != nil {
+		return nil, err
+	}
+
+	msg.length = binary.BigEndian.Uint32(length)
 
 	if !ValidPayloadSize(msg.length) {
 		return nil, errors.New("Error: the size of the payload is too big")
