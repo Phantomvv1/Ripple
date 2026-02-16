@@ -19,7 +19,7 @@ var (
 	MessageOK, _ = NewMessage(nil, ResponseMsg, 0)
 
 	//This will be used for the handshake
-	MessageHello, _ = NewMessage([]byte{'H'}, controlMsg, CacheFlag)
+	MessageHello, _ = NewMessage([]byte{'H'}, controlMsg, CachableFlag)
 	//This will be used for the handshake
 	MessageWelcome, _ = NewMessage([]byte{'W'}, controlMsg, 0)
 	//This will be used for the handshake
@@ -31,7 +31,8 @@ var (
 )
 
 const (
-	CacheFlag             = 1 << 3
+	AuthEnabledFlag       = 1 << 2
+	CachableFlag          = 1 << 3
 	CompressedPayloadFlag = 1 << 4
 	EncryptedPayloadFlag  = 1 << 5
 )

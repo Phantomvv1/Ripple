@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/Phantomvv1/Ripple/frame"
@@ -17,17 +18,22 @@ const (
 	StateReady
 )
 
+type HandleFunc func(*Conn, *frame.Message) (*frame.Message, error)
+
 type Conn struct {
 	net.Conn
 	state         int
 	responseCache map[string]*frame.Message
+	authEnabled   bool
+	token         string
 }
 
-func newConn(conn net.Conn) *Conn {
+func newConn(conn net.Conn, authEnabled bool) *Conn {
 	return &Conn{
 		Conn:          conn,
 		state:         StateInit,
 		responseCache: make(map[string]*frame.Message),
+		authEnabled:   authEnabled,
 	}
 }
 
@@ -43,12 +49,12 @@ func hashMessage(m *frame.Message) string {
 	return fmt.Sprintf("%x", result)
 }
 
-func (c *Conn) handleConnection(l *Listener, sessionId string) {
-	defer c.cleanUp(l, sessionId)
+func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, sessionId string) {
+	defer c.cleanUp(connections, mu, sessionId)
 	now := time.Now()
 
 	c.SetDeadline(time.Now().Add(time.Second))
-	err := l.handshake(c)
+	err := c.handshake()
 	if err != nil {
 		log.Println(err)
 		c.Close()
@@ -97,8 +103,9 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 		}
 
 		msgHash := hashMessage(msg)
+		cachable := msg.IsFlagSet(frame.CachableFlag)
 
-		if msg.Cachable() {
+		if cachable {
 			if resp, ok := c.responseCache[msgHash]; ok {
 				err = frame.Encode(c, resp)
 				if err != nil {
@@ -116,7 +123,7 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 			return
 		}
 
-		if msg.Cachable() {
+		if cachable {
 			c.responseCache[msgHash] = frame.MessageOK
 		}
 
@@ -124,8 +131,21 @@ func (c *Conn) handleConnection(l *Listener, sessionId string) {
 	}
 }
 
-func (c *Conn) cleanUp(l *Listener, sessionId string) {
-	l.mu.Lock()
-	delete(l.connections, sessionId)
-	l.mu.Unlock()
+func (c *Conn) handshake() error {
+	c.state = StateHandshake
+
+	err := frame.Encode(c, frame.MessageWelcome)
+	if err != nil {
+		return err
+	}
+
+	c.state = StateReady
+
+	return nil
+}
+
+func (c *Conn) cleanUp(connections map[string]*Conn, mu *sync.Mutex, sessionId string) {
+	mu.Lock()
+	delete(connections, sessionId)
+	mu.Unlock()
 }

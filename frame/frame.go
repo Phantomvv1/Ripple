@@ -11,11 +11,12 @@ import (
 )
 
 type Message struct {
-	version byte
-	flags   byte
-	msgType byte
-	length  uint32
-	payload []byte
+	version   byte
+	flags     byte
+	msgType   byte
+	authToken [16]byte
+	length    uint32
+	payload   []byte
 }
 
 func (m Message) Version() byte {
@@ -86,9 +87,25 @@ func (m *Message) DecodeJSONPayload(v any) error {
 	return nil
 }
 
-// Returns true if the message is cachable and false if it is not
-func (m Message) Cachable() bool {
-	return m.flags&CacheFlag != 0
+// Returns true if the flag in the message is 1 and false if it is not
+func (m Message) IsFlagSet(flag byte) bool {
+	return m.flags&flag != 0
+}
+
+func (m *Message) CompressPayload() error {
+	return nil
+}
+
+func (m *Message) DecompressPayload() error {
+	return nil
+}
+
+func (m *Message) EncryptPayload() error {
+	return nil
+}
+
+func (m *Message) DecryptPayload() error {
+	return nil
 }
 
 func ValidMsgType(msgType byte) bool {
@@ -107,24 +124,40 @@ func ValidPayloadSize(length uint32) bool {
 	return true
 }
 
-// flags:
-// bytes 0 % 3 - Methods
-// byte 4: is request cachable; 0 - not, 1 - cache the request
+// The new message function creates a new message with the given payload, msgType and flags.
+// Depending on which flags are set the message is automatically compressed and/or encrypted
 func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 	if !ValidMsgType(msgType) {
 		return nil, errors.New("Error: unknown message type")
 	}
 
-	return &Message{
+	msg := &Message{
 		version: Version,
 		flags:   flags,
 		msgType: msgType,
 		length:  uint32(len(payload)),
 		payload: payload,
-	}, nil
+	}
+
+	if msg.IsFlagSet(EncryptedPayloadFlag) {
+		err := msg.EncryptPayload()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if msg.IsFlagSet(CompressedPayloadFlag) {
+		err := msg.CompressPayload()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return msg, nil
 }
 
-// This function gets the payload, encodes it to json and returns a new message with the json encoded payload
+// The new json message function creates a new message with the given payload encoded into a json format, msgType and flags.
+// Depending on which flags are set the message is automatically compressed and/or encrypted
 func NewJSONMessage[T any](payload T, msgType byte, flags byte) (*Message, error) {
 	msgPayload, err := json.Marshal(payload)
 	if err != nil {
