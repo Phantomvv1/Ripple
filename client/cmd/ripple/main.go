@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"net"
 	"sync"
 	"time"
 
+	"github.com/Phantomvv1/Ripple/client"
 	"github.com/Phantomvv1/Ripple/frame"
 )
 
@@ -23,15 +23,18 @@ func main() {
 func DialAndTest(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	conn, err := net.Dial("tcp", ":42069")
+	now := time.Now()
+
+	conn, err := client.Dial(":42069")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer conn.Close()
 
-	now := time.Now()
-	msg, err := frame.Decode(conn)
+	cacheCheck := time.Now()
+
+	msg, err := SendHelloMsg(conn)
 	if err != nil {
 		log.Println(err)
 		return
@@ -39,49 +42,45 @@ func DialAndTest(wg *sync.WaitGroup) {
 
 	fmt.Println(msg)
 
-	cacheCheck := time.Now()
-	err = frame.Encode(conn, frame.MessageHello)
+	msg, err = SendHelloMsg(conn) // 2 times in order to check cache speed
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	msg, err = frame.Decode(conn)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	err = frame.Encode(conn, frame.MessageHello)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	msg, err = frame.Decode(conn)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
+	fmt.Println(msg)
 	fmt.Println("Cache time: ", time.Since(cacheCheck))
 
-	err = frame.Encode(conn, frame.MessageClose)
+	err = conn.SendMessage(frame.MessageClose)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	msg, err = frame.Decode(conn)
+	msg, err = conn.ReceiveMessage()
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
 	if !msg.Equals(*frame.MessageClose) {
-		log.Println("Error: connection wasn't propperly closed")
+		log.Println("Error: connection wasn't closed propperly")
 	}
 
 	fmt.Println(msg)
 	fmt.Println(time.Since(now))
+}
+
+func SendHelloMsg(conn *client.ClientConn) (*frame.Message, error) {
+	err := conn.SendMessage(frame.MessageHello)
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := conn.ReceiveMessage()
+	if err != nil {
+		return nil, err
+	}
+
+	return msg, nil
 }

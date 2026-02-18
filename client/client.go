@@ -36,11 +36,25 @@ func (c *ClientConn) handshake() error {
 }
 
 func (c *ClientConn) SendMessage(msg *frame.Message) error {
+	if c.authEnabled {
+		msg.UpdateAuthToken(c.authToken)
+		msg.UpdateFlag(frame.AuthEnabledFlag)
+	}
+
 	return frame.Encode(c, msg)
 }
 
-func (c *ClientConn) ReceiveMessage(msg *frame.Message) (*frame.Message, error) {
-	return frame.Decode(c)
+func (c *ClientConn) ReceiveMessage() (*frame.Message, error) {
+	msg, err := frame.Decode(c)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.authEnabled {
+		c.authToken = msg.AuthToken()
+	}
+
+	return msg, nil
 }
 
 func NewClientConn(conn net.Conn) *ClientConn {
@@ -61,5 +75,5 @@ func Dial(port string) (*ClientConn, error) {
 		return nil, err
 	}
 
-	return nil, nil
+	return clientConn, nil
 }

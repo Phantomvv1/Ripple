@@ -64,8 +64,10 @@ func (m Message) Equals(msg Message) bool {
 		return false
 	}
 
-	if m.operationId != msg.operationId {
-		return false
+	if m.msgType == RequestMsg {
+		if m.operationId != msg.operationId {
+			return false
+		}
 	}
 
 	if m.length != msg.length {
@@ -105,6 +107,10 @@ func (m *Message) DecodeJSONPayload(v any) error {
 // Returns true if the flag in the message is 1 and false if it is not
 func (m Message) IsFlagSet(flag byte) bool {
 	return m.flags&flag != 0
+}
+
+func (m *Message) UpdateFlag(flag byte) {
+	m.flags |= flag
 }
 
 func (m *Message) CompressPayload() error {
@@ -159,12 +165,14 @@ func NewMessage(payload []byte, msgType byte, flags byte, operationId ...uint16)
 		payload: payload,
 	}
 
-	if msgType == RequestMsg && operationId != nil {
-		msg.operationId = operationId[0]
-	} else {
-		return nil, errors.New("Error: when creating a request message you must always provide an operationId")
-	}
+	if msgType == RequestMsg {
+		if operationId != nil {
+			msg.operationId = operationId[0]
+		} else {
+			return nil, errors.New("Error: when creating a request message you must always provide an operationId")
+		}
 
+	}
 	payloadChange := false
 	if msg.IsFlagSet(CompressedPayloadFlag) {
 		err := msg.CompressPayload()
