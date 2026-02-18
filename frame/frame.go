@@ -56,12 +56,14 @@ func (m Message) Equals(msg Message) bool {
 		return false
 	}
 
-	if m.flags != msg.flags {
+	if m.msgType != msg.msgType {
 		return false
 	}
 
-	if m.msgType != msg.msgType {
-		return false
+	if m.msgType != controlMsg {
+		if m.flags != msg.flags {
+			return false
+		}
 	}
 
 	if m.msgType == RequestMsg {

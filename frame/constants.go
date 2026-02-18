@@ -48,7 +48,5 @@ func init() {
 	if AuthEnabled {
 		MessageOK.UpdateFlag(AuthEnabledFlag)
 		MessageWelcome.UpdateFlag(AuthEnabledFlag)
-		MessagePing.UpdateFlag(AuthEnabledFlag)
-		MessageClose.UpdateFlag(AuthEnabledFlag)
 	}
 }
