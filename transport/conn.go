@@ -89,7 +89,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 
 			c.token = *token
-
 		} else {
 			log.Println(c.token)
 			log.Println("Error: wrong token provided")
@@ -159,6 +158,10 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 		resp, err := handler(msg)
 		if err != nil {
 			log.Println(err)
+		}
+
+		if frame.AuthEnabled {
+			resp.UpdateAuthToken(c.token)
 		}
 
 		err = frame.Encode(c, resp)

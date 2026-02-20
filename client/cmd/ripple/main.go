@@ -31,8 +31,6 @@ func DialAndTest(wg *sync.WaitGroup) {
 		return
 	}
 
-	fmt.Println(msg)
-
 	conn, err := client.Dial(":42069")
 	if err != nil {
 		log.Println(err)
