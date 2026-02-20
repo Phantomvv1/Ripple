@@ -10,12 +10,13 @@ import (
 )
 
 type Message struct {
-	version   byte
-	flags     byte
-	msgType   byte
-	authToken [16]byte
-	length    uint32
-	payload   []byte
+	version     byte
+	flags       byte
+	msgType     byte
+	operationId uint16
+	authToken   [16]byte
+	length      uint32
+	payload     []byte
 }
 
 func (m Message) Version() byte {
@@ -42,6 +43,10 @@ func (m Message) AuthToken() [16]byte {
 	return m.authToken
 }
 
+func (m Message) OperationId() uint16 {
+	return m.operationId
+}
+
 func (m *Message) UpdateAuthToken(token [16]byte) {
 	m.authToken = token
 }
@@ -51,12 +56,20 @@ func (m Message) Equals(msg Message) bool {
 		return false
 	}
 
-	if m.flags != msg.flags {
+	if m.msgType != msg.msgType {
 		return false
 	}
 
-	if m.msgType != msg.msgType {
-		return false
+	if m.msgType != controlMsg {
+		if m.flags != msg.flags {
+			return false
+		}
+	}
+
+	if m.msgType == RequestMsg {
+		if m.operationId != msg.operationId {
+			return false
+		}
 	}
 
 	if m.length != msg.length {
@@ -90,17 +103,16 @@ func (m Message) String() string {
 
 // This method is used to decode a json payload into the provided value. The value must be a pointer!
 func (m *Message) DecodeJSONPayload(v any) error {
-	err := json.Unmarshal(m.payload, v)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return json.Unmarshal(m.payload, v)
 }
 
 // Returns true if the flag in the message is 1 and false if it is not
 func (m Message) IsFlagSet(flag byte) bool {
 	return m.flags&flag != 0
+}
+
+func (m *Message) UpdateFlag(flag byte) {
+	m.flags |= flag
 }
 
 func (m *Message) CompressPayload() error {
@@ -137,7 +149,8 @@ func ValidPayloadSize(length uint32) bool {
 
 // The new message function creates a new message with the given payload, msgType and flags.
 // Depending on which flags are set the message is automatically compressed and/or encrypted
-func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
+// When creating a request message the user must always provide an operationId
+func NewMessage(payload []byte, msgType byte, flags byte, operationId ...uint16) (*Message, error) {
 	if !ValidMsgType(msgType) {
 		return nil, errors.New("Error: unknown message type")
 	}
@@ -154,18 +167,35 @@ func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 		payload: payload,
 	}
 
-	if msg.IsFlagSet(EncryptedPayloadFlag) {
-		err := msg.EncryptPayload()
-		if err != nil {
-			return nil, err
+	if msgType == RequestMsg {
+		if operationId != nil {
+			msg.operationId = operationId[0]
+		} else {
+			return nil, errors.New("Error: when creating a request message you must always provide an operationId")
 		}
-	}
 
+	}
+	payloadChange := false
 	if msg.IsFlagSet(CompressedPayloadFlag) {
 		err := msg.CompressPayload()
 		if err != nil {
 			return nil, err
 		}
+
+		payloadChange = true
+	}
+
+	if msg.IsFlagSet(EncryptedPayloadFlag) {
+		err := msg.EncryptPayload()
+		if err != nil {
+			return nil, err
+		}
+
+		payloadChange = true
+	}
+
+	if payloadChange {
+		msg.length = uint32(len(msg.payload))
 	}
 
 	return msg, nil
@@ -173,13 +203,13 @@ func NewMessage(payload []byte, msgType byte, flags byte) (*Message, error) {
 
 // The new json message function creates a new message with the given payload encoded into a json format, msgType and flags.
 // Depending on which flags are set the message is automatically compressed and/or encrypted
-func NewJSONMessage[T any](payload T, msgType byte, flags byte) (*Message, error) {
+func NewJSONMessage[T any](payload T, msgType byte, flags byte, operationId ...uint16) (*Message, error) {
 	msgPayload, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewMessage(msgPayload, msgType, flags)
+	return NewMessage(msgPayload, msgType, flags, operationId...)
 }
 
 func Encode(w io.Writer, m *Message) error {
@@ -187,9 +217,27 @@ func Encode(w io.Writer, m *Message) error {
 		return errors.New("Error: the size of the payload is too big")
 	}
 
-	buf := make([]byte, 0, m.length+9) // magics + version + flags + msgType + length
+	isRequestMsg := m.msgType == RequestMsg
+
+	headerSize := 2 + 1 + 1 + 1 + 4 // Magics (2) + Version(1) + Flags(1) + MsgType(1) + Length(4)
+	if AuthEnabled {
+		headerSize += 16 // AuthToken(16)
+	}
+
+	if isRequestMsg {
+		headerSize += 2 // OperationId(2)
+	}
+
+	buf := make([]byte, 0, headerSize+int(m.length))
 
 	buf = append(buf, Magic1, Magic2, m.version, m.flags, m.msgType)
+
+	if isRequestMsg {
+		operationId := make([]byte, 2)
+		operationId = binary.BigEndian.AppendUint16(operationId, m.operationId)
+
+		buf = append(buf, operationId...)
+	}
 
 	if m.IsFlagSet(AuthEnabledFlag) {
 		buf = append(buf, m.authToken[:]...)
@@ -241,6 +289,16 @@ func Decode(r io.Reader) (*Message, error) {
 	msg.version = Version
 	msg.flags = header[3]
 	msg.msgType = header[4]
+
+	if msg.msgType == RequestMsg {
+		operationId := make([]byte, 2)
+		_, err = io.ReadFull(r, operationId)
+		if err != nil {
+			return nil, err
+		}
+
+		msg.operationId = binary.BigEndian.Uint16(operationId)
+	}
 
 	if msg.IsFlagSet(AuthEnabledFlag) {
 		token := make([]byte, 16)

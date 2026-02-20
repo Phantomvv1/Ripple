@@ -25,16 +25,14 @@ type Conn struct {
 	net.Conn
 	state         int
 	responseCache map[string]*frame.Message
-	authEnabled   bool
 	token         [16]byte
 }
 
-func newConn(conn net.Conn, authEnabled bool) *Conn {
+func newConn(conn net.Conn) *Conn {
 	return &Conn{
 		Conn:          conn,
 		state:         StateInit,
 		responseCache: make(map[string]*frame.Message),
-		authEnabled:   authEnabled,
 	}
 }
 
@@ -91,7 +89,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 
 			c.token = *token
+
 		} else {
+			log.Println(c.token)
 			log.Println("Error: wrong token provided")
 			return
 		}
@@ -104,7 +104,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 
 			continue
-		} else if msg.Equals(*frame.MessageClose) {
+		}
+
+		if msg.Equals(*frame.MessageClose) {
 			err = frame.Encode(c, frame.MessageClose)
 			if err != nil {
 				log.Println(err)
@@ -119,6 +121,10 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 
 		if cachable {
 			if resp, ok := c.responseCache[msgHash]; ok {
+				if frame.AuthEnabled {
+					resp.UpdateAuthToken(c.token)
+				}
+
 				err = frame.Encode(c, resp)
 				if err != nil {
 					log.Println(err)
@@ -129,7 +135,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 		}
 
-		frame.MessageOK.UpdateAuthToken(c.token)
+		if frame.AuthEnabled {
+			frame.MessageOK.UpdateAuthToken(c.token)
+		}
 
 		err = frame.Encode(c, frame.MessageOK)
 		if err != nil {
@@ -154,6 +162,7 @@ func (c *Conn) handshake() error {
 	}
 
 	frame.MessageWelcome.UpdateAuthToken(*token)
+	c.token = *token
 
 	err = frame.Encode(c, frame.MessageWelcome)
 	if err != nil {

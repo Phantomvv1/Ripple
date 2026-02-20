@@ -21,13 +21,13 @@ var (
 	//This will be used for the handshake
 	MessageHello, _ = NewMessage([]byte{'H'}, controlMsg, CachableFlag)
 	//This will be used for the handshake
-	MessageWelcome, _ = NewMessage([]byte{'W'}, controlMsg, 0)
+	MessageWelcome, _ = NewMessage([]byte{'W'}, controlMsg, 1)
 	//This will be used for the handshake
-	MessageReject, _ = NewMessage([]byte{'R'}, controlMsg, 0)
+	MessageReject, _ = NewMessage([]byte{'R'}, controlMsg, 1)
 
-	MessageClose, _ = NewMessage([]byte{'C'}, controlMsg, 0)
-	MessagePing, _  = NewMessage([]byte("Ping"), controlMsg, 0)
-	MessagePong, _  = NewMessage([]byte("Pong"), controlMsg, 0)
+	MessageClose, _ = NewMessage([]byte{'C'}, controlMsg, 1)
+	MessagePing, _  = NewMessage([]byte("Ping"), controlMsg, 4)
+	MessagePong, _  = NewMessage([]byte("Pong"), controlMsg, 4)
 )
 
 // This variable determines if the auth of the server is enabled.
@@ -46,7 +46,7 @@ const (
 
 func init() {
 	if AuthEnabled {
-		MessageOK.flags |= AuthEnabledFlag
-		MessageWelcome.flags |= AuthEnabledFlag
+		MessageOK.UpdateFlag(AuthEnabledFlag)
+		MessageWelcome.UpdateFlag(AuthEnabledFlag)
 	}
 }
