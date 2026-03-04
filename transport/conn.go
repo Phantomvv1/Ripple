@@ -141,7 +141,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 		handler, ok := operations[int(msg.OperationId())]
 		if !ok {
 			errMsg := "Error: there is no operation for this operation id"
-			log.Println(err)
 			msg, err := frame.NewMessage([]byte(errMsg), frame.ResponseMsg, 0)
 			if err != nil {
 				log.Println(err)
