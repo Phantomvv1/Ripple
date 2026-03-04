@@ -77,8 +77,10 @@ func (m Message) Equals(msg Message) bool {
 		}
 	}
 
-	if m.sequenceNumber != msg.sequenceNumber {
-		return false
+	if m.msgType != controlMsg {
+		if m.sequenceNumber != msg.sequenceNumber {
+			return false
+		}
 	}
 
 	if m.length != msg.length {

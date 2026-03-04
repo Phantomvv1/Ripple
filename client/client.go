@@ -2,19 +2,48 @@ package client
 
 import (
 	"errors"
+	"log"
 	"net"
 	"sync"
 
 	"github.com/Phantomvv1/Ripple/frame"
 )
 
+type response struct {
+	msg *frame.Message
+	err error
+}
+
 type ClientConn struct {
 	net.Conn
-	authEnabled     bool
-	authToken       [16]byte
-	sequenceNumber  uint32
-	pendingMessages map[uint32]*frame.Message
-	mu              sync.Mutex
+	authEnabled       bool
+	authToken         [16]byte
+	sequenceNumber    uint32
+	pendingMessages   map[uint32]response
+	muSeqNum          sync.Mutex
+	muPendingMessages sync.Mutex
+	messageReceived   chan struct{}
+	messageSent       chan uint32
+	sendMessage       chan *frame.Message
+}
+
+func NewClientConn(conn net.Conn) *ClientConn {
+	cl := &ClientConn{
+		Conn:              conn,
+		authEnabled:       false,
+		sequenceNumber:    0,
+		pendingMessages:   make(map[uint32]response),
+		muSeqNum:          sync.Mutex{},
+		muPendingMessages: sync.Mutex{},
+		messageReceived:   make(chan struct{}),
+		messageSent:       make(chan uint32),
+		sendMessage:       make(chan *frame.Message),
+	}
+
+	go cl.readResponses()
+	go cl.writeMessages()
+
+	return cl
 }
 
 func (c *ClientConn) AuthEnabled() bool {
@@ -39,67 +68,50 @@ func (c *ClientConn) handshake() error {
 	return nil
 }
 
-func (c *ClientConn) SendMessage(msg *frame.Message) (uint32, error) {
-	if c.authEnabled {
-		msg.UpdateAuthToken(c.authToken)
-		msg.UpdateFlag(frame.AuthEnabledFlag)
+// The SendMessage function send the message you give it and return the sequence number of the message, which is needed for the response
+// and an error if there is any
+func (c *ClientConn) SendMessage(msg *frame.Message) (*frame.Message, error) {
+	c.muSeqNum.Lock()
+
+	seq := c.sequenceNumber
+	msg.UpdateSequenceNumber(c.sequenceNumber)
+	c.sequenceNumber++
+
+	c.muSeqNum.Unlock()
+
+	c.sendMessage <- msg
+
+	// Wait until message was sent
+	for {
+		seqNumOfSentMsg := <-c.messageSent
+		if seqNumOfSentMsg == seq {
+			break
+		}
 	}
 
-	var err error
-	if !msg.Equals(*frame.MessageClose) && !msg.Equals(*frame.MessagePing) {
-		for {
-			if _, ok := c.pendingMessages[c.sequenceNumber]; ok {
-				c.sequenceNumber++
-				continue
-			}
+	//Check for error about encoding the message and delete the information
+	c.muPendingMessages.Lock()
+	res, _ := c.pendingMessages[seq]
 
-			err = frame.Encode(c, msg, c.sequenceNumber)
-
-			c.mu.Lock()
-			c.pendingMessages[c.sequenceNumber] = nil
-			c.mu.Unlock()
-
-			c.sequenceNumber++
-
-			return c.sequenceNumber - 1, err
+	if res.msg == nil {
+		if res.err != nil {
+			return nil, res.err
 		}
 
+		delete(c.pendingMessages, seq)
+		c.muPendingMessages.Unlock()
+	} else {
+		c.muPendingMessages.Unlock()
+		return res.msg, res.err
 	}
 
-	return 0, frame.Encode(c, msg, 0)
-}
+	for {
+		<-c.messageReceived
 
-func (c *ClientConn) ReceiveMessage(sequenceNumber uint32) (*frame.Message, error) {
-	msg, err := frame.Decode(c)
-	if err != nil {
-		return nil, err
-	}
-
-	if msg.SequenceNumber() != sequenceNumber {
-		c.pendingMessages[msg.SequenceNumber()] = msg
-
-		res := make(chan *frame.Message, 1)
-		c.listenForResponse(res, sequenceNumber)
-
-		msg = <-res
-	}
-
-	if c.authEnabled {
-		c.authToken = msg.AuthToken()
-	}
-
-	delete(c.pendingMessages, msg.SequenceNumber())
-
-	return msg, err
-}
-
-func NewClientConn(conn net.Conn) *ClientConn {
-	return &ClientConn{
-		Conn:            conn,
-		authEnabled:     false,
-		sequenceNumber:  0,
-		pendingMessages: make(map[uint32]*frame.Message),
-		mu:              sync.Mutex{},
+		resp, ok := c.pendingMessages[seq]
+		if ok {
+			return resp.msg, resp.err
+		}
 	}
 }
 
@@ -120,11 +132,36 @@ func Dial(port string) (*ClientConn, error) {
 	return clientConn, nil
 }
 
-func (c *ClientConn) listenForResponse(res chan<- *frame.Message, sequenceNumber uint32) {
+func (c *ClientConn) readResponses() {
 	for {
-		if resp, ok := c.pendingMessages[sequenceNumber]; ok {
-			res <- resp
-			return
+		msg, err := frame.Decode(c)
+		if err != nil {
+			log.Println(err)
 		}
+
+		c.muPendingMessages.Lock()
+		c.pendingMessages[msg.SequenceNumber()] = response{msg: msg, err: err}
+		c.muPendingMessages.Unlock()
+
+		c.messageReceived <- struct{}{}
+	}
+}
+
+func (c *ClientConn) writeMessages() {
+	for {
+		msg := <-c.sendMessage
+
+		if c.authEnabled {
+			msg.UpdateAuthToken(c.authToken)
+			msg.UpdateFlag(frame.AuthEnabledFlag)
+		}
+
+		err := frame.Encode(c, msg, msg.SequenceNumber())
+
+		c.muPendingMessages.Lock()
+		c.pendingMessages[msg.SequenceNumber()] = response{msg: nil, err: err}
+		c.muPendingMessages.Unlock()
+
+		c.messageSent <- msg.SequenceNumber()
 	}
 }

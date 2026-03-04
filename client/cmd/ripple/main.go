@@ -40,7 +40,7 @@ func DialAndTest(wg *sync.WaitGroup) {
 
 	cacheCheck := time.Now()
 
-	m, err := SendHelloMsg(conn, msg)
+	m, err := conn.SendMessage(msg)
 	if err != nil {
 		log.Println(err)
 		return
@@ -48,7 +48,7 @@ func DialAndTest(wg *sync.WaitGroup) {
 
 	fmt.Println(m)
 
-	m, err = SendHelloMsg(conn, msg) // 2 times in order to check cache speed
+	m, err = conn.SendMessage(msg) // 2 times in order to check cache speed
 	if err != nil {
 		log.Println(err)
 		return
@@ -57,13 +57,7 @@ func DialAndTest(wg *sync.WaitGroup) {
 	fmt.Println(m)
 	fmt.Println("\033[31mCache time: \033[m", time.Since(cacheCheck))
 
-	err = conn.SendMessage(frame.MessageClose)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	m, err = conn.ReceiveMessage()
+	m, err = conn.SendMessage(frame.MessageClose)
 	if err != nil {
 		log.Println(err)
 		return
@@ -76,18 +70,4 @@ func DialAndTest(wg *sync.WaitGroup) {
 		log.Println("Error: connection wasn't closed propperly")
 	}
 
-}
-
-func SendHelloMsg(conn *client.ClientConn, message *frame.Message) (*frame.Message, error) {
-	err := conn.SendMessage(message)
-	if err != nil {
-		return nil, err
-	}
-
-	msg, err := conn.ReceiveMessage()
-	if err != nil {
-		return nil, err
-	}
-
-	return msg, nil
 }
