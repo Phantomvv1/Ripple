@@ -112,6 +112,7 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 				return
 			}
 
+			fmt.Println(time.Since(now))
 			return
 		}
 
@@ -130,6 +131,7 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 					return
 				}
 
+				fmt.Println(time.Since(now))
 				continue
 			}
 		}

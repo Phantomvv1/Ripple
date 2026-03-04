@@ -44,7 +44,7 @@ func (c *ClientConn) SendMessage(msg *frame.Message) error {
 	}
 
 	var err error
-	if msg.Equals(*frame.MessageClose) || msg.Equals(*frame.MessagePing) || msg.Equals(*frame.MessageHello) {
+	if !msg.Equals(*frame.MessageClose) && !msg.Equals(*frame.MessagePing) {
 		for {
 			if _, ok := c.pendingMessages[c.sequenceNumber]; ok {
 				c.sequenceNumber++
@@ -58,7 +58,7 @@ func (c *ClientConn) SendMessage(msg *frame.Message) error {
 
 	}
 
-	return frame.Encode(c, msg, c.sequenceNumber)
+	return frame.Encode(c, msg, 0)
 }
 
 func (c *ClientConn) ReceiveMessage() (*frame.Message, error) {
