@@ -55,7 +55,7 @@ func DialAndTest(wg *sync.WaitGroup) {
 	}
 
 	fmt.Println(m)
-	fmt.Println("Cache time: ", time.Since(cacheCheck))
+	fmt.Println("\033[31mCache time: \033[m", time.Since(cacheCheck))
 
 	err = conn.SendMessage(frame.MessageClose)
 	if err != nil {
@@ -69,12 +69,13 @@ func DialAndTest(wg *sync.WaitGroup) {
 		return
 	}
 
+	fmt.Println(m)
+	fmt.Println(time.Since(now))
+
 	if !m.Equals(*frame.MessageClose) {
 		log.Println("Error: connection wasn't closed propperly")
 	}
 
-	fmt.Println(m)
-	fmt.Println(time.Since(now))
 }
 
 func SendHelloMsg(conn *client.ClientConn, message *frame.Message) (*frame.Message, error) {

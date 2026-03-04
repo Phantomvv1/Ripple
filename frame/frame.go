@@ -11,13 +11,14 @@ import (
 )
 
 type Message struct {
-	version     byte
-	flags       byte
-	msgType     byte
-	operationId uint16
-	authToken   [16]byte
-	length      uint32
-	payload     []byte
+	version        byte
+	flags          byte
+	msgType        byte
+	operationId    uint16
+	authToken      [16]byte
+	sequenceNumber uint32
+	length         uint32
+	payload        []byte
 }
 
 func (m Message) Version() byte {
@@ -48,6 +49,10 @@ func (m Message) OperationId() uint16 {
 	return m.operationId
 }
 
+func (m *Message) SequenceNumber() uint32 {
+	return m.sequenceNumber
+}
+
 func (m *Message) UpdateAuthToken(token [16]byte) {
 	m.authToken = token
 }
@@ -71,6 +76,10 @@ func (m Message) Equals(msg Message) bool {
 		if m.operationId != msg.operationId {
 			return false
 		}
+	}
+
+	if m.sequenceNumber != msg.sequenceNumber {
+		return false
 	}
 
 	if m.length != msg.length {
@@ -97,16 +106,19 @@ func (m Message) String() string {
 
 	if m.IsFlagSet(AuthEnabledFlag) {
 		if m.msgType == RequestMsg {
-			return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\noperationId: %d\nlength: %d\npayload: %s",
-				m.version, m.flags, msgType, m.authToken, m.operationId, m.length, string(m.payload))
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\noperationId: %d\nsequence number: %d\nlength: %d\npayload: %s",
+				m.version, m.flags, msgType, m.authToken, m.operationId, m.sequenceNumber, m.length, string(m.payload))
 		} else {
-			return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.authToken, m.length, string(m.payload))
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\nsequence number: %d\nlength: %d\npayload: %s",
+				m.version, m.flags, msgType, m.authToken, m.sequenceNumber, m.length, string(m.payload))
 		}
 	} else {
 		if m.msgType == RequestMsg {
-			return fmt.Sprintf("Message v%d, flags: %b, type: %s\noperationId: %d\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.operationId, m.length, string(m.payload))
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\noperationId: %d\nsequence number: %d\nlength: %d\npayload: %s",
+				m.version, m.flags, msgType, m.operationId, m.sequenceNumber, m.length, string(m.payload))
 		} else {
-			return fmt.Sprintf("Message v%d, flags: %b, type: %s\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.length, string(m.payload))
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\nsequence number: %d\nlength: %d\npayload: %s",
+				m.version, m.flags, msgType, m.sequenceNumber, m.length, string(m.payload))
 		}
 	}
 }
@@ -123,6 +135,10 @@ func (m Message) IsFlagSet(flag byte) bool {
 
 func (m *Message) UpdateFlag(flag byte) {
 	m.flags |= flag
+}
+
+func (m *Message) UpdateSequenceNumber(sequenceNumber uint32) {
+	m.sequenceNumber = sequenceNumber
 }
 
 func (m *Message) CompressPayload() error {
@@ -222,14 +238,14 @@ func NewJSONMessage[T any](payload T, msgType byte, flags byte, operationId ...u
 	return NewMessage(msgPayload, msgType, flags, operationId...)
 }
 
-func Encode(w io.Writer, m *Message) error {
+func Encode(w io.Writer, m *Message, sequenceNumber uint32) error {
 	if !ValidPayloadSize(m.length) {
 		return errors.New("Error: the size of the payload is too big")
 	}
 
 	isRequestMsg := m.msgType == RequestMsg
 
-	headerSize := 2 + 1 + 1 + 1 + 4 // Magics (2) + Version(1) + Flags(1) + MsgType(1) + Length(4)
+	headerSize := 2 + 1 + 1 + 1 + 2 + 4 // Magics (2) + Version(1) + Flags(1) + MsgType(1) + SequenceNumber(2) + Length(4)
 	if AuthEnabled {
 		headerSize += 16 // AuthToken(16)
 	}
@@ -241,6 +257,8 @@ func Encode(w io.Writer, m *Message) error {
 	buf := make([]byte, 0, headerSize+int(m.length))
 
 	buf = append(buf, Magic1, Magic2, m.version, m.flags, m.msgType)
+
+	buf = binary.BigEndian.AppendUint32(buf, sequenceNumber)
 
 	if isRequestMsg {
 		operationId := make([]byte, 2)
@@ -273,7 +291,7 @@ func Encode(w io.Writer, m *Message) error {
 
 func Decode(r io.Reader) (*Message, error) {
 	msg := &Message{}
-	header := make([]byte, 5)
+	header := make([]byte, 9)
 
 	_, err := io.ReadFull(r, header)
 	if err != nil {
@@ -299,6 +317,7 @@ func Decode(r io.Reader) (*Message, error) {
 	msg.version = Version
 	msg.flags = header[3]
 	msg.msgType = header[4]
+	msg.sequenceNumber = binary.BigEndian.Uint32(header[5:9])
 
 	if msg.msgType == RequestMsg {
 		operationId := make([]byte, 2)

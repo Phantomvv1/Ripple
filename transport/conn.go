@@ -65,7 +65,7 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 
 	if c.state != StateReady {
 		log.Println("Error: the conn is not ready to work propperly")
-		err := frame.Encode(c, frame.MessageClose)
+		err := c.Send(frame.MessageClose)
 		if err != nil {
 			log.Println(err)
 			return
@@ -73,15 +73,15 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 	}
 
 	for {
-		msg, err := frame.Decode(c)
+		receivedMsg, err := frame.Decode(c)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 
-		fmt.Println(msg)
+		fmt.Println(receivedMsg)
 
-		if frame.AuthEnabled && msg.AuthToken() == c.token {
+		if frame.AuthEnabled && receivedMsg.AuthToken() == c.token {
 			token, err := makeAuthToken()
 			if err != nil {
 				log.Println(err)
@@ -95,8 +95,8 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			return
 		}
 
-		if msg.Equals(*frame.MessagePing) {
-			err = frame.Encode(c, frame.MessagePong)
+		if receivedMsg.Equals(*frame.MessagePing) {
+			err = c.Send(frame.MessagePong)
 			if err != nil {
 				log.Println(err)
 				return
@@ -105,8 +105,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			continue
 		}
 
-		if msg.Equals(*frame.MessageClose) {
-			err = frame.Encode(c, frame.MessageClose)
+		if receivedMsg.Equals(*frame.MessageClose) {
+			log.Println("Sending Close")
+			err = c.Send(frame.MessageClose)
 			if err != nil {
 				log.Println(err)
 				return
@@ -115,8 +116,8 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			return
 		}
 
-		msgHash := hashMessage(msg)
-		cachable := msg.IsFlagSet(frame.CachableFlag)
+		msgHash := hashMessage(receivedMsg)
+		cachable := receivedMsg.IsFlagSet(frame.CachableFlag)
 
 		if cachable {
 			if resp, ok := c.responseCache[msgHash]; ok {
@@ -124,7 +125,7 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 					resp.UpdateAuthToken(c.token)
 				}
 
-				err = frame.Encode(c, resp)
+				err = c.Send(resp)
 				if err != nil {
 					log.Println(err)
 					return
@@ -138,7 +139,7 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			frame.MessageOK.UpdateAuthToken(c.token)
 		}
 
-		handler, ok := operations[int(msg.OperationId())]
+		handler, ok := operations[int(receivedMsg.OperationId())]
 		if !ok {
 			errMsg := "Error: there is no operation for this operation id"
 			msg, err := frame.NewMessage([]byte(errMsg), frame.ResponseMsg, 0)
@@ -147,14 +148,14 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 				return
 			}
 
-			err = frame.Encode(c, msg)
+			err = c.Send(msg)
 			if err != nil {
 				log.Println(err)
 				return
 			}
 		}
 
-		resp, err := handler(msg)
+		resp, err := handler(receivedMsg)
 		if err != nil {
 			log.Println(err)
 		}
@@ -163,7 +164,9 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			resp.UpdateAuthToken(c.token)
 		}
 
-		err = frame.Encode(c, resp)
+		resp.UpdateSequenceNumber(receivedMsg.SequenceNumber())
+
+		err = c.Send(resp)
 		if err != nil {
 			log.Println(err)
 			return
@@ -188,7 +191,7 @@ func (c *Conn) handshake() error {
 	frame.MessageWelcome.UpdateAuthToken(*token)
 	c.token = *token
 
-	err = frame.Encode(c, frame.MessageWelcome)
+	err = c.Send(frame.MessageWelcome)
 	if err != nil {
 		return err
 	}
@@ -215,4 +218,8 @@ func makeAuthToken() (*[16]byte, error) {
 
 	r := [16]byte(result)
 	return &r, nil
+}
+
+func (c *Conn) Send(msg *frame.Message) error {
+	return frame.Encode(c, msg, msg.SequenceNumber())
 }

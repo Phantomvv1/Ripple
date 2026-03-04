@@ -9,8 +9,10 @@ import (
 
 type ClientConn struct {
 	net.Conn
-	authEnabled bool
-	authToken   [16]byte
+	authEnabled     bool
+	authToken       [16]byte
+	sequenceNumber  uint32
+	pendingMessages map[uint32]struct{}
 }
 
 func (c ClientConn) AuthEnabled() bool {
@@ -41,7 +43,22 @@ func (c *ClientConn) SendMessage(msg *frame.Message) error {
 		msg.UpdateFlag(frame.AuthEnabledFlag)
 	}
 
-	return frame.Encode(c, msg)
+	var err error
+	if !msg.Equals(*frame.MessageClose) && !msg.Equals(*frame.MessagePing) && !msg.Equals(*frame.MessageHello) {
+		for {
+			if _, ok := c.pendingMessages[c.sequenceNumber]; ok {
+				c.sequenceNumber++
+				continue
+			}
+
+			err = frame.Encode(c, msg, c.sequenceNumber)
+			c.sequenceNumber++
+			return err
+		}
+
+	}
+
+	return frame.Encode(c, msg, c.sequenceNumber)
 }
 
 func (c *ClientConn) ReceiveMessage() (*frame.Message, error) {
@@ -53,6 +70,8 @@ func (c *ClientConn) ReceiveMessage() (*frame.Message, error) {
 	if c.authEnabled {
 		c.authToken = msg.AuthToken()
 	}
+
+	delete(c.pendingMessages, msg.SequenceNumber())
 
 	return msg, nil
 }
