@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 )
 
 type Message struct {
@@ -346,7 +345,6 @@ func Decode(r io.Reader) (*Message, error) {
 	}
 
 	msg.length = binary.BigEndian.Uint32(length)
-	log.Println(msg)
 
 	if !ValidPayloadSize(msg.length) {
 		return nil, errors.New("Error: the size of the payload is too big")

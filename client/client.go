@@ -44,7 +44,7 @@ func (c *ClientConn) SendMessage(msg *frame.Message) error {
 	}
 
 	var err error
-	if !msg.Equals(*frame.MessageClose) && !msg.Equals(*frame.MessagePing) && !msg.Equals(*frame.MessageHello) {
+	if msg.Equals(*frame.MessageClose) || msg.Equals(*frame.MessagePing) || msg.Equals(*frame.MessageHello) {
 		for {
 			if _, ok := c.pendingMessages[c.sequenceNumber]; ok {
 				c.sequenceNumber++

@@ -79,7 +79,7 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			return
 		}
 
-		fmt.Println(receivedMsg)
+		fmt.Println(receivedMsg, "\n")
 
 		if frame.AuthEnabled && receivedMsg.AuthToken() == c.token {
 			token, err := makeAuthToken()
@@ -106,7 +106,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 		}
 
 		if receivedMsg.Equals(*frame.MessageClose) {
-			log.Println("Sending Close")
 			err = c.Send(frame.MessageClose)
 			if err != nil {
 				log.Println(err)
