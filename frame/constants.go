@@ -33,7 +33,7 @@ var (
 // This variable determines if the auth of the server is enabled.
 // By default auth is enabled and the variable is set to true.
 // If you want to disable auth you can set this variable to false.
-// Another way of choosing to use auth or not is to call one of the functions that create a new listtener.
+// Another way of choosing to use auth or not is to call one of the functions that create a new listener.
 // They automatically tweek the variable as needed.
 var AuthEnabled = true
 

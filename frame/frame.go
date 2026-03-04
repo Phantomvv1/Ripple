@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 )
 
 type Message struct {
@@ -95,9 +96,18 @@ func (m Message) String() string {
 	}
 
 	if m.IsFlagSet(AuthEnabledFlag) {
-		return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.authToken, m.length, string(m.payload))
+		if m.msgType == RequestMsg {
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\noperationId: %d\nlength: %d\npayload: %s",
+				m.version, m.flags, msgType, m.authToken, m.operationId, m.length, string(m.payload))
+		} else {
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\ntoken: %v\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.authToken, m.length, string(m.payload))
+		}
 	} else {
-		return fmt.Sprintf("Message v%d, flags: %b, type: %s\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.length, string(m.payload))
+		if m.msgType == RequestMsg {
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\noperationId: %d\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.operationId, m.length, string(m.payload))
+		} else {
+			return fmt.Sprintf("Message v%d, flags: %b, type: %s\nlength: %d\npayload: %s", m.version, m.flags, msgType, m.length, string(m.payload))
+		}
 	}
 }
 
@@ -234,7 +244,7 @@ func Encode(w io.Writer, m *Message) error {
 
 	if isRequestMsg {
 		operationId := make([]byte, 2)
-		operationId = binary.BigEndian.AppendUint16(operationId, m.operationId)
+		binary.BigEndian.PutUint16(operationId, m.operationId)
 
 		buf = append(buf, operationId...)
 	}
@@ -317,6 +327,7 @@ func Decode(r io.Reader) (*Message, error) {
 	}
 
 	msg.length = binary.BigEndian.Uint32(length)
+	log.Println(msg)
 
 	if !ValidPayloadSize(msg.length) {
 		return nil, errors.New("Error: the size of the payload is too big")

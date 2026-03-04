@@ -19,7 +19,7 @@ const (
 	StateReady
 )
 
-type HandleFunc func(*Conn, *frame.Message) (*frame.Message, error)
+type HandleFunc func(*frame.Message) (*frame.Message, error)
 
 type Conn struct {
 	net.Conn
@@ -48,7 +48,7 @@ func hashMessage(m *frame.Message) string {
 	return fmt.Sprintf("%x", result)
 }
 
-func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, sessionId string) {
+func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, sessionId string, operations map[int]HandleFunc) {
 	defer c.cleanUp(connections, mu, sessionId)
 	now := time.Now()
 
@@ -89,7 +89,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 
 			c.token = *token
-
 		} else {
 			log.Println(c.token)
 			log.Println("Error: wrong token provided")
@@ -139,14 +138,39 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			frame.MessageOK.UpdateAuthToken(c.token)
 		}
 
-		err = frame.Encode(c, frame.MessageOK)
+		handler, ok := operations[int(msg.OperationId())]
+		if !ok {
+			errMsg := "Error: there is no operation for this operation id"
+			msg, err := frame.NewMessage([]byte(errMsg), frame.ResponseMsg, 0)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			err = frame.Encode(c, msg)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+		}
+
+		resp, err := handler(msg)
+		if err != nil {
+			log.Println(err)
+		}
+
+		if frame.AuthEnabled {
+			resp.UpdateAuthToken(c.token)
+		}
+
+		err = frame.Encode(c, resp)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 
 		if cachable {
-			c.responseCache[msgHash] = frame.MessageOK
+			c.responseCache[msgHash] = resp
 		}
 
 		fmt.Println(time.Since(now))

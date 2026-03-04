@@ -2,7 +2,10 @@ package transport
 
 import (
 	"crypto/rand"
+	"errors"
 	"net"
+	"reflect"
+	"runtime"
 	"sync"
 
 	"github.com/Phantomvv1/Ripple/frame"
@@ -29,6 +32,7 @@ func NewListener(addr string) (*Listener, error) {
 		authEnabled: frame.AuthEnabled,
 		connections: make(map[string]*Conn),
 		mu:          sync.Mutex{},
+		operations:  make(map[int]HandleFunc),
 	}, nil
 }
 
@@ -49,6 +53,10 @@ func NewListenerWithoutAuth(addr string) (*Listener, error) {
 }
 
 func (l *Listener) Run() error {
+	if len(l.operations) == 0 {
+		return errors.New("Error: you can't run the listener when you have 0 operations to do")
+	}
+
 	for {
 		conn, err := l.listener.Accept()
 		if err != nil {
@@ -63,6 +71,15 @@ func (l *Listener) Run() error {
 		l.connections[sessionId] = upgradedConn
 		l.mu.Unlock()
 
-		go upgradedConn.handleConnection(l.connections, &l.mu, sessionId)
+		go upgradedConn.handleConnection(l.connections, &l.mu, sessionId, l.operations)
 	}
+}
+
+func (l *Listener) AddOperation(operationId int, handleFunc HandleFunc) {
+	if handler, ok := l.operations[operationId]; ok {
+		funcName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
+		panic("Error: adding an operation with an id that already exists for the function " + funcName)
+	}
+
+	l.operations[operationId] = handleFunc
 }
