@@ -26,7 +26,7 @@ type Conn struct {
 	net.Conn
 	state         int
 	responseCache map[string]*frame.Message
-	secret        [16]byte
+	secret        [32]byte
 }
 
 func newConn(conn net.Conn) *Conn {
@@ -117,15 +117,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 
 		if cachable {
 			if resp, ok := c.responseCache[msgHash]; ok {
-				if frame.AuthEnabled {
-					sentToken := receivedMsg.AuthToken()
-					checkToken := c.makeAuthToken(receivedMsg.SequenceNumber(), receivedMsg.Payload())
-					if !hmac.Equal(sentToken[:], checkToken[:]) {
-						log.Println("Tampared message")
-						return
-					}
-				}
-
 				err = c.Send(resp)
 				if err != nil {
 					log.Println(err)
@@ -181,6 +172,8 @@ func (c *Conn) handshake() error {
 	if err != nil {
 		return err
 	}
+
+	c.secret = *secret
 
 	frame.MessageWelcome.UpdateAuthToken(*secret)
 

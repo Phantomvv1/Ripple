@@ -155,11 +155,9 @@ func (c *ClientConn) writeMessages() {
 		msg := <-c.sendMessage
 
 		if c.authEnabled {
-			msg.UpdateAuthToken(c.secret)
+			msg.UpdateAuthToken(c.makeAuthToken(msg.SequenceNumber(), msg.Payload()))
 			msg.UpdateFlag(frame.AuthEnabledFlag)
 		}
-
-		msg.UpdateAuthToken()
 
 		err := frame.Encode(c, msg, msg.SequenceNumber())
 		if err != nil {
