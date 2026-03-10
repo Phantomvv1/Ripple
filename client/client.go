@@ -1,6 +1,9 @@
 package client
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"log"
 	"net"
@@ -17,7 +20,7 @@ type response struct {
 type ClientConn struct {
 	net.Conn
 	authEnabled       bool
-	authToken         [16]byte
+	secret            [32]byte
 	sequenceNumber    uint32
 	pendingMessages   map[uint32]response
 	muSeqNum          sync.Mutex
@@ -62,7 +65,7 @@ func (c *ClientConn) handshake() error {
 
 	if msg.IsFlagSet(frame.AuthEnabledFlag) {
 		c.authEnabled = true
-		c.authToken = msg.AuthToken()
+		c.secret = msg.AuthToken()
 	}
 
 	return nil
@@ -152,11 +155,16 @@ func (c *ClientConn) writeMessages() {
 		msg := <-c.sendMessage
 
 		if c.authEnabled {
-			msg.UpdateAuthToken(c.authToken)
+			msg.UpdateAuthToken(c.secret)
 			msg.UpdateFlag(frame.AuthEnabledFlag)
 		}
 
+		msg.UpdateAuthToken()
+
 		err := frame.Encode(c, msg, msg.SequenceNumber())
+		if err != nil {
+			log.Println(err)
+		}
 
 		c.muPendingMessages.Lock()
 		c.pendingMessages[msg.SequenceNumber()] = response{msg: nil, err: err}
@@ -164,4 +172,15 @@ func (c *ClientConn) writeMessages() {
 
 		c.messageSent <- msg.SequenceNumber()
 	}
+}
+
+func (c *ClientConn) makeAuthToken(seqNumber uint32, payload []byte) [32]byte {
+	algorithm := hmac.New(sha256.New, c.secret[:])
+	sequenceNumberSlice := make([]byte, 4)
+	binary.BigEndian.PutUint32(sequenceNumberSlice, seqNumber)
+	algorithm.Write(sequenceNumberSlice)
+	algorithm.Write(payload)
+
+	token := algorithm.Sum(nil)
+	return [32]byte(token)
 }

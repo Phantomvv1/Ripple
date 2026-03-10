@@ -14,7 +14,7 @@ type Message struct {
 	flags          byte
 	msgType        byte
 	operationId    uint16
-	authToken      [16]byte
+	authToken      [32]byte
 	sequenceNumber uint32
 	length         uint32
 	payload        []byte
@@ -40,7 +40,7 @@ func (m Message) Payload() []byte {
 	return m.payload
 }
 
-func (m Message) AuthToken() [16]byte {
+func (m Message) AuthToken() [32]byte {
 	return m.authToken
 }
 
@@ -52,7 +52,7 @@ func (m *Message) SequenceNumber() uint32 {
 	return m.sequenceNumber
 }
 
-func (m *Message) UpdateAuthToken(token [16]byte) {
+func (m *Message) UpdateAuthToken(token [32]byte) {
 	m.authToken = token
 }
 
@@ -248,7 +248,7 @@ func Encode(w io.Writer, m *Message, sequenceNumber uint32) error {
 
 	headerSize := 2 + 1 + 1 + 1 + 2 + 4 // Magics (2) + Version(1) + Flags(1) + MsgType(1) + SequenceNumber(2) + Length(4)
 	if AuthEnabled {
-		headerSize += 16 // AuthToken(16)
+		headerSize += 32 // AuthToken(16)
 	}
 
 	if isRequestMsg {
@@ -331,13 +331,13 @@ func Decode(r io.Reader) (*Message, error) {
 	}
 
 	if msg.IsFlagSet(AuthEnabledFlag) {
-		token := make([]byte, 16)
+		token := make([]byte, 32)
 		_, err = io.ReadFull(r, token)
 		if err != nil {
 			return nil, err
 		}
 
-		msg.authToken = [16]byte(token)
+		msg.authToken = [32]byte(token)
 	}
 
 	length := make([]byte, 4)

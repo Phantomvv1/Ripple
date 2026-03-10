@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -25,7 +26,7 @@ type Conn struct {
 	net.Conn
 	state         int
 	responseCache map[string]*frame.Message
-	token         [16]byte
+	secret        [16]byte
 }
 
 func newConn(conn net.Conn) *Conn {
@@ -81,20 +82,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 
 		fmt.Println(receivedMsg, "\n")
 
-		if frame.AuthEnabled && receivedMsg.AuthToken() == c.token {
-			token, err := makeAuthToken()
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			c.token = *token
-		} else {
-			log.Println(c.token)
-			log.Println("Error: wrong token provided")
-			return
-		}
-
 		if receivedMsg.Equals(*frame.MessagePing) {
 			err = c.Send(frame.MessagePong)
 			if err != nil {
@@ -116,13 +103,27 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			return
 		}
 
+		if frame.AuthEnabled {
+			sentToken := receivedMsg.AuthToken()
+			checkToken := c.makeAuthToken(receivedMsg.SequenceNumber(), receivedMsg.Payload())
+			if !hmac.Equal(sentToken[:], checkToken[:]) {
+				log.Println("Tampared message")
+				return
+			}
+		}
+
 		msgHash := hashMessage(receivedMsg)
 		cachable := receivedMsg.IsFlagSet(frame.CachableFlag)
 
 		if cachable {
 			if resp, ok := c.responseCache[msgHash]; ok {
 				if frame.AuthEnabled {
-					resp.UpdateAuthToken(c.token)
+					sentToken := receivedMsg.AuthToken()
+					checkToken := c.makeAuthToken(receivedMsg.SequenceNumber(), receivedMsg.Payload())
+					if !hmac.Equal(sentToken[:], checkToken[:]) {
+						log.Println("Tampared message")
+						return
+					}
 				}
 
 				err = c.Send(resp)
@@ -134,10 +135,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 				fmt.Println(time.Since(now))
 				continue
 			}
-		}
-
-		if frame.AuthEnabled {
-			frame.MessageOK.UpdateAuthToken(c.token)
 		}
 
 		handler, ok := operations[int(receivedMsg.OperationId())]
@@ -161,10 +158,6 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			log.Println(err)
 		}
 
-		if frame.AuthEnabled {
-			resp.UpdateAuthToken(c.token)
-		}
-
 		resp.UpdateSequenceNumber(receivedMsg.SequenceNumber())
 
 		err = c.Send(resp)
@@ -184,13 +177,12 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 func (c *Conn) handshake() error {
 	c.state = StateHandshake
 
-	token, err := makeAuthToken()
+	secret, err := c.makeSessionSecret()
 	if err != nil {
 		return err
 	}
 
-	frame.MessageWelcome.UpdateAuthToken(*token)
-	c.token = *token
+	frame.MessageWelcome.UpdateAuthToken(*secret)
 
 	err = c.Send(frame.MessageWelcome)
 	if err != nil {
@@ -210,17 +202,28 @@ func (c *Conn) cleanUp(connections map[string]*Conn, mu *sync.Mutex, sessionId s
 	c.Close()
 }
 
-func makeAuthToken() (*[16]byte, error) {
-	result := make([]byte, 16)
+func (c *Conn) makeSessionSecret() (*[32]byte, error) {
+	result := make([]byte, 32)
 	_, err := rand.Read(result)
 	if err != nil {
 		return nil, err
 	}
 
-	r := [16]byte(result)
+	r := [32]byte(result)
 	return &r, nil
 }
 
 func (c *Conn) Send(msg *frame.Message) error {
 	return frame.Encode(c, msg, msg.SequenceNumber())
+}
+
+func (c *Conn) makeAuthToken(seqNumber uint32, payload []byte) [32]byte {
+	algorithm := hmac.New(sha256.New, c.secret[:])
+	sequenceNumberSlice := make([]byte, 4)
+	binary.BigEndian.PutUint32(sequenceNumberSlice, seqNumber)
+	algorithm.Write(sequenceNumberSlice)
+	algorithm.Write(payload)
+
+	token := algorithm.Sum(nil)
+	return [32]byte(token)
 }
