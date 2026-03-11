@@ -82,86 +82,85 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 
 		fmt.Println(receivedMsg, "\n")
 
-		if receivedMsg.Equals(*frame.MessagePing) {
-			err = c.Send(frame.MessagePong)
-			if err != nil {
-				log.Println(err)
-				return
+		go func() {
+			if receivedMsg.Equals(*frame.MessagePing) {
+				err = c.Send(frame.MessagePong)
+				if err != nil {
+					log.Println(err)
+					return
+				}
 			}
 
-			continue
-		}
-
-		if receivedMsg.Equals(*frame.MessageClose) {
-			err = c.Send(frame.MessageClose)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			fmt.Println(time.Since(now))
-			return
-		}
-
-		if frame.AuthEnabled {
-			sentToken := receivedMsg.AuthToken()
-			checkToken := c.makeAuthToken(receivedMsg.SequenceNumber(), receivedMsg.Payload())
-			if !hmac.Equal(sentToken[:], checkToken[:]) {
-				log.Println("Tampared message")
-				return
-			}
-		}
-
-		msgHash := hashMessage(receivedMsg)
-		cachable := receivedMsg.IsFlagSet(frame.CachableFlag)
-
-		if cachable {
-			if resp, ok := c.responseCache[msgHash]; ok {
-				err = c.Send(resp)
+			if receivedMsg.Equals(*frame.MessageClose) {
+				err = c.Send(frame.MessageClose)
 				if err != nil {
 					log.Println(err)
 					return
 				}
 
 				fmt.Println(time.Since(now))
-				continue
+				return
 			}
-		}
 
-		handler, ok := operations[int(receivedMsg.OperationId())]
-		if !ok {
-			errMsg := "Error: there is no operation for this operation id"
-			msg, err := frame.NewMessage([]byte(errMsg), frame.ResponseMsg, 0)
+			if frame.AuthEnabled {
+				sentToken := receivedMsg.AuthToken()
+				checkToken := c.makeAuthToken(receivedMsg.SequenceNumber(), receivedMsg.Payload())
+				if !hmac.Equal(sentToken[:], checkToken[:]) {
+					log.Println("Tampared message")
+					return
+				}
+			}
+
+			msgHash := hashMessage(receivedMsg)
+			cachable := receivedMsg.IsFlagSet(frame.CachableFlag)
+
+			if cachable {
+				if resp, ok := c.responseCache[msgHash]; ok {
+					err = c.Send(resp)
+					if err != nil {
+						log.Println(err)
+						return
+					}
+
+					fmt.Println(time.Since(now))
+				}
+			}
+
+			handler, ok := operations[int(receivedMsg.OperationId())]
+			if !ok {
+				errMsg := "Error: there is no operation for this operation id"
+				msg, err := frame.NewMessage([]byte(errMsg), frame.ResponseMsg, 0)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				err = c.Send(msg)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+
+			resp, err := handler(receivedMsg)
+			if err != nil {
+				log.Println(err)
+			}
+
+			resp.UpdateSequenceNumber(receivedMsg.SequenceNumber())
+
+			err = c.Send(resp)
 			if err != nil {
 				log.Println(err)
 				return
 			}
 
-			err = c.Send(msg)
-			if err != nil {
-				log.Println(err)
-				return
+			if cachable {
+				c.responseCache[msgHash] = resp
 			}
-		}
 
-		resp, err := handler(receivedMsg)
-		if err != nil {
-			log.Println(err)
-		}
-
-		resp.UpdateSequenceNumber(receivedMsg.SequenceNumber())
-
-		err = c.Send(resp)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		if cachable {
-			c.responseCache[msgHash] = resp
-		}
-
-		fmt.Println(time.Since(now))
+			fmt.Println(time.Since(now))
+		}()
 	}
 }
 

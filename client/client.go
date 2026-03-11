@@ -22,11 +22,10 @@ type ClientConn struct {
 	authEnabled       bool
 	secret            [32]byte
 	sequenceNumber    uint32
-	pendingMessages   map[uint32]response
+	pendingMessages   map[uint32]chan response
 	muSeqNum          sync.Mutex
 	muPendingMessages sync.Mutex
 	messageReceived   chan struct{}
-	messageSent       chan uint32
 	sendMessage       chan *frame.Message
 }
 
@@ -35,11 +34,10 @@ func NewClientConn(conn net.Conn) (*ClientConn, error) {
 		Conn:              conn,
 		authEnabled:       false,
 		sequenceNumber:    0,
-		pendingMessages:   make(map[uint32]response),
+		pendingMessages:   make(map[uint32]chan response),
 		muSeqNum:          sync.Mutex{},
 		muPendingMessages: sync.Mutex{},
 		messageReceived:   make(chan struct{}),
-		messageSent:       make(chan uint32),
 		sendMessage:       make(chan *frame.Message),
 	}
 
@@ -87,38 +85,17 @@ func (c *ClientConn) SendMessage(msg *frame.Message) (*frame.Message, error) {
 
 	c.sendMessage <- msg
 
-	// Wait until message was sent
-	for {
-		seqNumOfSentMsg := <-c.messageSent
-		if seqNumOfSentMsg == seq {
-			break
-		}
-	}
+	respChan := make(chan response)
+	c.pendingMessages[seq] = respChan
 
 	//Check for error about encoding the message and delete the information
-	c.muPendingMessages.Lock()
-	res, _ := c.pendingMessages[seq]
-
-	if res.msg == nil {
-		if res.err != nil {
-			return nil, res.err
-		}
-
-		delete(c.pendingMessages, seq)
-		c.muPendingMessages.Unlock()
-	} else {
-		c.muPendingMessages.Unlock()
-		return res.msg, res.err
+	encErr := <-respChan
+	if encErr.err != nil {
+		return nil, encErr.err
 	}
 
-	for {
-		<-c.messageReceived
-
-		resp, ok := c.pendingMessages[seq]
-		if ok {
-			return resp.msg, resp.err
-		}
-	}
+	resp := <-respChan
+	return resp.msg, resp.err
 }
 
 // This function dials the server on the given port. The format of the port parameter is as follows: ":8080"
@@ -139,10 +116,10 @@ func (c *ClientConn) readResponses() {
 		}
 
 		c.muPendingMessages.Lock()
-		c.pendingMessages[msg.SequenceNumber()] = response{msg: msg, err: err}
+		respChan := c.pendingMessages[msg.SequenceNumber()]
 		c.muPendingMessages.Unlock()
 
-		c.messageReceived <- struct{}{}
+		respChan <- response{msg: msg, err: err}
 	}
 }
 
@@ -156,15 +133,13 @@ func (c *ClientConn) writeMessages() {
 		}
 
 		err := frame.Encode(c, msg, msg.SequenceNumber())
-		if err != nil {
-			log.Println(err)
-		}
+		log.Println(err)
 
 		c.muPendingMessages.Lock()
-		c.pendingMessages[msg.SequenceNumber()] = response{msg: nil, err: err}
+		respChan := c.pendingMessages[msg.SequenceNumber()]
 		c.muPendingMessages.Unlock()
 
-		c.messageSent <- msg.SequenceNumber()
+		respChan <- response{msg: nil, err: err}
 	}
 }
 
