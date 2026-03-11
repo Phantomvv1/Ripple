@@ -30,7 +30,7 @@ type ClientConn struct {
 	sendMessage       chan *frame.Message
 }
 
-func NewClientConn(conn net.Conn) *ClientConn {
+func NewClientConn(conn net.Conn) (*ClientConn, error) {
 	cl := &ClientConn{
 		Conn:              conn,
 		authEnabled:       false,
@@ -43,10 +43,15 @@ func NewClientConn(conn net.Conn) *ClientConn {
 		sendMessage:       make(chan *frame.Message),
 	}
 
+	err := cl.handshake()
+	if err != nil {
+		return nil, err
+	}
+
 	go cl.readResponses()
 	go cl.writeMessages()
 
-	return cl
+	return cl, nil
 }
 
 func (c *ClientConn) AuthEnabled() bool {
@@ -71,8 +76,6 @@ func (c *ClientConn) handshake() error {
 	return nil
 }
 
-// The SendMessage function send the message you give it and return the sequence number of the message, which is needed for the response
-// and an error if there is any
 func (c *ClientConn) SendMessage(msg *frame.Message) (*frame.Message, error) {
 	c.muSeqNum.Lock()
 
@@ -125,14 +128,7 @@ func Dial(port string) (*ClientConn, error) {
 		return nil, err
 	}
 
-	clientConn := NewClientConn(conn)
-
-	err = clientConn.handshake()
-	if err != nil {
-		return nil, err
-	}
-
-	return clientConn, nil
+	return NewClientConn(conn)
 }
 
 func (c *ClientConn) readResponses() {
