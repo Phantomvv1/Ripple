@@ -98,7 +98,11 @@ func (c *ClientConn) SendMessage(msg *frame.Message) (*frame.Message, error) {
 	}
 
 	resp := <-respChan
+
+	c.muPendingMessages.Lock()
 	delete(c.pendingMessages, seq)
+	c.muPendingMessages.Unlock()
+
 	return resp.msg, resp.err
 }
 
@@ -120,8 +124,12 @@ func (c *ClientConn) readResponses() {
 		}
 
 		c.muPendingMessages.Lock()
-		respChan := c.pendingMessages[msg.SequenceNumber()]
+		respChan, ok := c.pendingMessages[msg.SequenceNumber()]
 		c.muPendingMessages.Unlock()
+
+		if !ok {
+			log.Println("Missing msg sequence number in the map. Reader", msg.SequenceNumber())
+		}
 
 		respChan <- response{msg: msg, err: err}
 	}
@@ -139,8 +147,12 @@ func (c *ClientConn) writeMessages() {
 		err := frame.Encode(c, msg, msg.SequenceNumber())
 
 		c.muPendingMessages.Lock()
-		respChan := c.pendingMessages[msg.SequenceNumber()]
+		respChan, ok := c.pendingMessages[msg.SequenceNumber()]
 		c.muPendingMessages.Unlock()
+
+		if !ok {
+			log.Println("Missing msg sequence number in the map. Writer", msg.SequenceNumber())
+		}
 
 		respChan <- response{msg: nil, err: err}
 	}

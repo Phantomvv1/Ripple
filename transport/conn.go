@@ -91,19 +91,21 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 		fmt.Println(receivedMsg)
 		fmt.Println()
 
-		go func(receivedMsg *frame.Message) {
-			if receivedMsg.Equals(*frame.MessagePing) {
-				pingMsg := frame.MessagePing.Clone().UpdateSequenceNumber(receivedMsg.SequenceNumber())
+		go func(innerReceivedMsg *frame.Message) {
+			if innerReceivedMsg.Equals(*frame.MessagePing) {
+				pingMsg := frame.MessagePing.Clone().UpdateSequenceNumber(innerReceivedMsg.SequenceNumber())
 				encodeErrChan := c.SendConcurrentMsg(pingMsg)
 				err = <-encodeErrChan
 				if err != nil {
 					log.Println(err)
 					return
 				}
+
+				return
 			}
 
-			if receivedMsg.Equals(*frame.MessageClose) {
-				closeMsg := frame.MessageClose.Clone().UpdateSequenceNumber(receivedMsg.SequenceNumber())
+			if innerReceivedMsg.Equals(*frame.MessageClose) {
+				closeMsg := frame.MessageClose.Clone().UpdateSequenceNumber(innerReceivedMsg.SequenceNumber())
 				encodeErrChan := c.SendConcurrentMsg(closeMsg)
 				err = <-encodeErrChan
 				if err != nil {
@@ -116,19 +118,21 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 			}
 
 			if frame.AuthEnabled {
-				sentToken := receivedMsg.AuthToken()
-				checkToken := c.makeAuthToken(receivedMsg.SequenceNumber(), receivedMsg.Payload())
+				sentToken := innerReceivedMsg.AuthToken()
+				checkToken := c.makeAuthToken(innerReceivedMsg.SequenceNumber(), innerReceivedMsg.Payload())
 				if !hmac.Equal(sentToken[:], checkToken[:]) {
 					log.Println("Tampared message")
 					return
 				}
 			}
 
-			msgHash := hashMessage(receivedMsg)
-			cachable := receivedMsg.IsFlagSet(frame.CachableFlag)
+			msgHash := hashMessage(innerReceivedMsg)
+			cachable := innerReceivedMsg.IsFlagSet(frame.CachableFlag)
 
 			if cachable {
 				if resp, ok := c.responseCache[msgHash]; ok {
+					resp.UpdateSequenceNumber(innerReceivedMsg.SequenceNumber())
+
 					encodeErrChan := c.SendConcurrentMsg(resp)
 					err = <-encodeErrChan
 					if err != nil {
@@ -137,10 +141,11 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 					}
 
 					fmt.Println(time.Since(now))
+					return
 				}
 			}
 
-			handler, ok := operations[int(receivedMsg.OperationId())]
+			handler, ok := operations[int(innerReceivedMsg.OperationId())]
 			if !ok {
 				errMsg := "Error: there is no operation for this operation id"
 				msg, err := frame.NewMessage([]byte(errMsg), frame.ResponseMsg, 0)
@@ -149,20 +154,21 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 					return
 				}
 
-				err = c.Send(msg)
+				encodeErrChan := c.SendConcurrentMsg(msg)
+				err = <-encodeErrChan
 				if err != nil {
 					log.Println(err)
 					return
 				}
 			}
 
-			resp, err := handler(receivedMsg)
+			resp, err := handler(innerReceivedMsg)
 			if err != nil {
 				log.Println(err)
 			}
 
 			resp = resp.Clone()
-			resp.UpdateSequenceNumber(receivedMsg.SequenceNumber())
+			resp.UpdateSequenceNumber(innerReceivedMsg.SequenceNumber())
 
 			encodeErrChan := c.SendConcurrentMsg(resp)
 			err = <-encodeErrChan
@@ -251,6 +257,7 @@ func (c *Conn) makeAuthToken(seqNumber uint32, payload []byte) [32]byte {
 func (c *Conn) writeMessages() {
 	for {
 		msg := <-c.writeChan
+		log.Println("Sending:", msg)
 
 		err := c.Send(msg)
 
