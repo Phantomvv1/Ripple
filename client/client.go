@@ -83,10 +83,13 @@ func (c *ClientConn) SendMessage(msg *frame.Message) (*frame.Message, error) {
 
 	c.muSeqNum.Unlock()
 
-	c.sendMessage <- msg
+	respChan := make(chan response, 2)
 
-	respChan := make(chan response)
+	c.muPendingMessages.Lock()
 	c.pendingMessages[seq] = respChan
+	c.muPendingMessages.Unlock()
+
+	c.sendMessage <- msg
 
 	//Check for error about encoding the message and delete the information
 	encErr := <-respChan
@@ -95,6 +98,7 @@ func (c *ClientConn) SendMessage(msg *frame.Message) (*frame.Message, error) {
 	}
 
 	resp := <-respChan
+	delete(c.pendingMessages, seq)
 	return resp.msg, resp.err
 }
 
@@ -133,7 +137,6 @@ func (c *ClientConn) writeMessages() {
 		}
 
 		err := frame.Encode(c, msg, msg.SequenceNumber())
-		log.Println(err)
 
 		c.muPendingMessages.Lock()
 		respChan := c.pendingMessages[msg.SequenceNumber()]

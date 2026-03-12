@@ -52,8 +52,9 @@ func (m *Message) SequenceNumber() uint32 {
 	return m.sequenceNumber
 }
 
-func (m *Message) UpdateAuthToken(token [32]byte) {
+func (m *Message) UpdateAuthToken(token [32]byte) *Message {
 	m.authToken = token
+	return m
 }
 
 func (m Message) Equals(msg Message) bool {
@@ -134,12 +135,14 @@ func (m Message) IsFlagSet(flag byte) bool {
 	return m.flags&flag != 0
 }
 
-func (m *Message) UpdateFlag(flag byte) {
+func (m *Message) UpdateFlag(flag byte) *Message {
 	m.flags |= flag
+	return m
 }
 
-func (m *Message) UpdateSequenceNumber(sequenceNumber uint32) {
+func (m *Message) UpdateSequenceNumber(sequenceNumber uint32) *Message {
 	m.sequenceNumber = sequenceNumber
+	return m
 }
 
 func (m *Message) CompressPayload() error {
@@ -156,6 +159,11 @@ func (m *Message) EncryptPayload() error {
 
 func (m *Message) DecryptPayload() error {
 	return nil
+}
+
+func (m *Message) Clone() *Message {
+	msg := *m
+	return &msg
 }
 
 func ValidMsgType(msgType byte) bool {
