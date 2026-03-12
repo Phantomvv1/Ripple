@@ -120,6 +120,10 @@ func (c *ClientConn) readResponses() {
 	for {
 		msg, err := frame.Decode(c)
 		if err != nil {
+			if errors.Is(net.ErrClosed, err) || msg == nil {
+				return
+			}
+
 			log.Println(err)
 		}
 
@@ -145,6 +149,9 @@ func (c *ClientConn) writeMessages() {
 		}
 
 		err := frame.Encode(c, msg, msg.SequenceNumber())
+		if errors.Is(net.ErrClosed, err) {
+			return
+		}
 
 		c.muPendingMessages.Lock()
 		respChan, ok := c.pendingMessages[msg.SequenceNumber()]

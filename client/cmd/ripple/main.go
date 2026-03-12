@@ -49,7 +49,6 @@ func DialAndTest(wg *sync.WaitGroup) {
 	fmt.Println(m)
 
 	m, err = conn.SendMessage(msg) // 2 times in order to check cache speed
-	log.Println("Second hello")
 	if err != nil {
 		log.Println(err)
 		return
@@ -58,9 +57,7 @@ func DialAndTest(wg *sync.WaitGroup) {
 	fmt.Println(m)
 	fmt.Println("\033[31mCache time: \033[m", time.Since(cacheCheck))
 
-	log.Println("Sending close msg")
 	m, err = conn.SendMessage(frame.MessageClose.Clone())
-	log.Println("Sent close msg")
 	if err != nil {
 		log.Println(err)
 		return

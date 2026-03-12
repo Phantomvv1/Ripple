@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -84,6 +86,10 @@ func (c *Conn) handleConnection(connections map[string]*Conn, mu *sync.Mutex, se
 	for {
 		receivedMsg, err := frame.Decode(c)
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+				return
+			}
+
 			log.Println(err)
 			return
 		}
